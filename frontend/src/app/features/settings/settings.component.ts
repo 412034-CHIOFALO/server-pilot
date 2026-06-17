@@ -148,6 +148,30 @@ import { Router } from '@angular/router';
           </div>
         </mat-tab>
 
+        <!-- Observabilidad -->
+        <mat-tab label="Observabilidad">
+          <div class="section-card">
+            <div style="font-size:13px;color:var(--text-secondary);line-height:1.6">
+              El backend expone métricas en formato Prometheus en:
+            </div>
+            <div style="font-family:monospace;font-size:12px;background:var(--bg-tertiary);padding:10px 14px;border-radius:6px;color:var(--accent);word-break:break-all">
+              {{ prometheusUrl }}
+            </div>
+            <div class="action-row">
+              <button class="test-btn" (click)="copyPrometheus()">
+                <mat-icon style="font-size:14px;vertical-align:middle">content_copy</mat-icon>
+                {{ copyMsg() || 'Copiar URL' }}
+              </button>
+            </div>
+            <div class="note">
+              Autenticación: Basic Auth con las credenciales del panel.<br>
+              Iniciá el stack de observabilidad con:<br>
+              <code style="display:block;margin-top:6px;font-size:11px">docker compose -f docker-compose.observability.yml up -d</code>
+              Grafana queda disponible en <strong>http://localhost:3001</strong>
+            </div>
+          </div>
+        </mat-tab>
+
         <!-- Acceso -->
         <mat-tab label="Acceso al panel">
           <div class="section-card">
@@ -184,6 +208,7 @@ import { Router } from '@angular/router';
 export class SettingsComponent implements OnInit {
   saving  = signal(false);
   testing = signal(false);
+  copyMsg = signal('');
 
   ssh    = { host: '', port: 22, username: '', keyPath: '' };
   idrac  = { enabled: false, host: '', username: '', password: '' };
@@ -191,6 +216,7 @@ export class SettingsComponent implements OnInit {
   creds  = { username: '', newPassword: '', confirmPassword: '' };
 
   idracHasPass = false;
+  prometheusUrl = `${window.location.protocol}//${window.location.hostname}:8090/actuator/prometheus`;
 
   sshMsg    = signal(''); sshMsgOk    = signal(false);
   idracMsg  = signal(''); idracMsgOk  = signal(false);
@@ -271,6 +297,13 @@ export class SettingsComponent implements OnInit {
     this.api.post<any>('/api/alerts/test').subscribe({
       next: r => { this.testing.set(false); this.showMsg('alertsMsg', 'alertsMsgOk', r.result + (r.detail ? ': ' + r.detail : ''), r.result === 'OK'); },
       error: () => { this.testing.set(false); this.showMsg('alertsMsg', 'alertsMsgOk', 'Error de red', false); }
+    });
+  }
+
+  copyPrometheus() {
+    navigator.clipboard.writeText(this.prometheusUrl).then(() => {
+      this.copyMsg.set('¡Copiado!');
+      setTimeout(() => this.copyMsg.set(''), 2000);
     });
   }
 
