@@ -1,24 +1,14 @@
 package com.serverpilot.terminal;
 
-import com.jcraft.jsch.Channel;
-import com.jcraft.jsch.ChannelShell;
-import com.jcraft.jsch.JSch;
-import com.jcraft.jsch.Session;
+import com.jcraft.jsch.*;
+import com.serverpilot.ssh.SshService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import org.springframework.web.socket.BinaryMessage;
-import org.springframework.web.socket.CloseStatus;
-import org.springframework.web.socket.TextMessage;
-import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.*;
 import org.springframework.web.socket.handler.AbstractWebSocketHandler;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.PipedInputStream;
-import java.io.PipedOutputStream;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicReference;
@@ -28,24 +18,16 @@ public class TerminalHandler extends AbstractWebSocketHandler {
 
     private static final Logger log = LoggerFactory.getLogger(TerminalHandler.class);
 
-    @Value("${sp.ssh.host}")
-    private String sshHost;
-
-    @Value("${sp.ssh.port}")
-    private int sshPort;
-
-    @Value("${sp.ssh.username}")
-    private String sshUser;
-
-    @Value("${sp.ssh.privateKeyPath}")
-    private String sshKeyPath;
-
+    private final SshService sshService;
     private final AtomicReference<TerminalSession> activeSession = new AtomicReference<>();
+
+    public TerminalHandler(SshService sshService) {
+        this.sshService = sshService;
+    }
 
     @Override
     public void afterConnectionEstablished(WebSocketSession wsSession) throws Exception {
-        TerminalSession existing = activeSession.get();
-        if (existing != null) {
+        if (activeSession.get() != null) {
             wsSession.sendMessage(new TextMessage("ERROR: Terminal ocupada"));
             wsSession.close();
             return;
@@ -53,12 +35,10 @@ public class TerminalHandler extends AbstractWebSocketHandler {
 
         try {
             JSch jsch = new JSch();
-            Path keyPath = Path.of(sshKeyPath);
-            if (Files.exists(keyPath)) {
-                jsch.addIdentity(sshKeyPath);
-            }
+            Path kp = Path.of(sshService.getKeyPath());
+            if (Files.exists(kp)) jsch.addIdentity(sshService.getKeyPath());
 
-            Session sshSession = jsch.getSession(sshUser, sshHost, sshPort);
+            Session sshSession = jsch.getSession(sshService.getUsername(), sshService.getHost(), sshService.getPort());
             sshSession.setConfig("StrictHostKeyChecking", "no");
             sshSession.connect(5000);
 
@@ -74,7 +54,6 @@ public class TerminalHandler extends AbstractWebSocketHandler {
             channel.connect();
 
             TerminalSession ts = new TerminalSession(wsSession, sshSession, channel, pipedOut);
-
             if (!activeSession.compareAndSet(null, ts)) {
                 channel.disconnect();
                 sshSession.disconnect();
@@ -88,9 +67,7 @@ public class TerminalHandler extends AbstractWebSocketHandler {
                 try {
                     int n;
                     while ((n = shellOut.read(buf)) != -1) {
-                        if (wsSession.isOpen()) {
-                            wsSession.sendMessage(new BinaryMessage(buf, 0, n, true));
-                        }
+                        if (wsSession.isOpen()) wsSession.sendMessage(new BinaryMessage(buf, 0, n, true));
                     }
                 } catch (IOException e) {
                     // connection closed
@@ -113,8 +90,7 @@ public class TerminalHandler extends AbstractWebSocketHandler {
         TerminalSession ts = activeSession.get();
         if (ts == null || ts.wsSession() != session) return;
         try {
-            byte[] data = message.getPayload().getBytes();
-            ts.stdin().write(data);
+            ts.stdin().write(message.getPayload().getBytes());
             ts.stdin().flush();
         } catch (IOException e) {
             log.error("Write to SSH stdin failed", e);
@@ -126,8 +102,7 @@ public class TerminalHandler extends AbstractWebSocketHandler {
         TerminalSession ts = activeSession.get();
         if (ts == null || ts.wsSession() != session) return;
         try {
-            byte[] data = message.getPayload().array();
-            ts.stdin().write(data);
+            ts.stdin().write(message.getPayload().array());
             ts.stdin().flush();
         } catch (IOException e) {
             log.error("Write to SSH stdin failed", e);
@@ -137,16 +112,14 @@ public class TerminalHandler extends AbstractWebSocketHandler {
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         TerminalSession ts = activeSession.get();
-        if (ts != null && ts.wsSession() == session) {
-            closeTerminalSession(ts);
-        }
+        if (ts != null && ts.wsSession() == session) closeTerminalSession(ts);
     }
 
     private void closeTerminalSession(TerminalSession ts) {
         if (!activeSession.compareAndSet(ts, null)) return;
-        try { ts.stdin().close(); } catch (Exception e) { /* ignore */ }
-        try { ts.channel().disconnect(); } catch (Exception e) { /* ignore */ }
-        try { ts.sshSession().disconnect(); } catch (Exception e) { /* ignore */ }
+        try { ts.stdin().close(); }    catch (Exception ignored) {}
+        try { ts.channel().disconnect(); } catch (Exception ignored) {}
+        try { ts.sshSession().disconnect(); } catch (Exception ignored) {}
     }
 
     private record TerminalSession(
