@@ -44,6 +44,12 @@ public class RunbookService {
             runbooks = seedDefaults();
             save();
         }
+        // Migration: seed updates runbook if absent
+        if (runbooks.stream().noneMatch(r -> "Aplicar updates del SO".equals(r.name))) {
+            runbooks.add(new Runbook(uuid(), "Aplicar updates del SO",
+                "Actualiza todos los paquetes del sistema", "sudo apt-get upgrade -y", true));
+            save();
+        }
     }
 
     private List<Runbook> seedDefaults() {

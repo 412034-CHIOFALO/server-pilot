@@ -1,8 +1,11 @@
 import { Component, OnDestroy, OnInit, ViewChild, ElementRef, AfterViewInit, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
+import { MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { Chart, registerables } from 'chart.js';
 import { RealtimeService } from '../../core/realtime.service';
+import { ApiService } from '../../core/api.service';
+import { UpdatesDialogComponent } from './updates-dialog.component';
 
 Chart.register(...registerables);
 
@@ -15,10 +18,12 @@ interface MetricsSnapshot {
   timestamp: number;
 }
 
+interface UpdateInfo { count: number; rebootRequired: boolean; packages: string[]; }
+
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, MatIconModule],
+  imports: [CommonModule, MatIconModule, MatDialogModule],
   styles: [`
     .grid-4 { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:20px; }
     .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
@@ -85,6 +90,29 @@ interface MetricsSnapshot {
       border: 1px solid rgba(188,140,255,.2);
       padding: 3px 10px; border-radius: 20px; font-size:11px; font-weight:600;
     }
+    .updates-card {
+      background: var(--bg-secondary); border: 1px solid var(--border);
+      border-radius: var(--radius-md); padding: 14px 20px; margin-bottom: 16px;
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    }
+    .updates-card .accent-line-h {
+      position:absolute; top:0; left:0; bottom:0; width:3px; border-radius:var(--radius-md) 0 0 var(--radius-md);
+    }
+    .updates-info { flex:1; display:flex; align-items:center; gap:12px; }
+    .updates-count { font-size:22px; font-weight:700; color:var(--text-primary); }
+    .updates-label { font-size:12px; color:var(--text-secondary); }
+    .reboot-badge {
+      font-size:11px; font-weight:600; padding:2px 10px; border-radius:20px;
+      background:rgba(248,81,73,.1); color:var(--red); border:1px solid rgba(248,81,73,.25);
+    }
+    .updates-btn {
+      padding:7px 14px; border-radius:8px; border:1px solid var(--border);
+      background:transparent; color:var(--text-secondary); cursor:pointer;
+      font-size:12px; font-weight:500; transition:all .15s; display:flex; align-items:center; gap:5px;
+    }
+    .updates-btn:hover { background:var(--bg-hover); color:var(--text-primary); }
+    .updates-btn mat-icon { font-size:14px; width:14px; height:14px; }
+    .updates-loading { font-size:12px; color:var(--text-muted); }
   `],
   template: `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
@@ -170,6 +198,33 @@ interface MetricsSnapshot {
       </div>
     </div>
 
+    <!-- Updates -->
+    <div class="updates-card" style="position:relative">
+      <div class="accent-line-h" style="background:linear-gradient(180deg,#d29922,#f0883e)"></div>
+      <mat-icon style="color:var(--yellow);margin-left:8px">system_update</mat-icon>
+      @if (updatesLoading()) {
+        <span class="updates-loading">Verificando actualizaciones…</span>
+      } @else if (updatesError()) {
+        <span class="updates-loading" style="color:var(--text-muted)">SSH no disponible</span>
+      } @else if (updates()) {
+        <div class="updates-info">
+          <div>
+            <div class="updates-count">{{ updates()!.count }}</div>
+            <div class="updates-label">paquetes actualizables</div>
+          </div>
+          @if (updates()!.rebootRequired) {
+            <span class="reboot-badge">⚠ reinicio requerido</span>
+          }
+        </div>
+        <button class="updates-btn" (click)="showUpdates()">
+          <mat-icon>list</mat-icon> Ver paquetes
+        </button>
+        <button class="updates-btn" (click)="loadUpdates()">
+          <mat-icon>refresh</mat-icon>
+        </button>
+      }
+    </div>
+
     <!-- Charts -->
     <div class="grid-2">
       <div class="chart-card">
@@ -208,10 +263,27 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
   mainNet  = computed(() => this.snapshot()?.net?.[0] ?? null);
   uptime   = computed(() => this.snapshot()?.uptimeSeconds ?? 0);
 
-  constructor(private rt: RealtimeService) {}
+  updates        = signal<UpdateInfo | null>(null);
+  updatesLoading = signal(false);
+  updatesError   = signal(false);
 
-  ngOnInit() { this.connectWs(); }
+  constructor(private rt: RealtimeService, private api: ApiService, private dialog: MatDialog) {}
+
+  ngOnInit() { this.connectWs(); this.loadUpdates(); }
   ngAfterViewInit() { this.initCharts(); }
+
+  loadUpdates() {
+    this.updatesLoading.set(true);
+    this.updatesError.set(false);
+    this.api.get<UpdateInfo>('/api/updates').subscribe({
+      next: d => { this.updates.set(d); this.updatesLoading.set(false); },
+      error: () => { this.updatesError.set(true); this.updatesLoading.set(false); }
+    });
+  }
+
+  showUpdates() {
+    this.dialog.open(UpdatesDialogComponent, { data: this.updates(), width: '520px' });
+  }
 
   private async connectWs() {
     this.ws = await this.rt.openSocket('/ws/metrics');
