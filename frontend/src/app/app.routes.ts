@@ -30,7 +30,27 @@ export const routes: Routes = [
       {
         path: 'idrac',
         loadComponent: () => import('./features/idrac/idrac.component').then(m => m.IdracComponent)
-      }
+      },
+      {
+        path: 'auditoria',
+        loadComponent: () => import('./features/audit/audit.component').then(m => m.AuditComponent)
+      },
+      {
+        path: 'configuracion',
+        loadComponent: () => import('./features/settings/settings.component').then(m => m.SettingsComponent)
+      },
+      {
+        path: 'archivos',
+        loadComponent: () => import('./features/files/files.component').then(m => m.FilesComponent)
+      },
+      {
+        path: 'procesos',
+        loadComponent: () => import('./features/processes/processes.component').then(m => m.ProcessesComponent)
+      },
+      {
+        path: 'acciones',
+        loadComponent: () => import('./features/runbooks/runbooks.component').then(m => m.RunbooksComponent)
+      },
     ]
   },
   { path: '**', redirectTo: '' }

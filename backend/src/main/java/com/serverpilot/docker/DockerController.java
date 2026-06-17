@@ -1,5 +1,6 @@
 package com.serverpilot.docker;
 
+import com.serverpilot.audit.AuditService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -11,9 +12,11 @@ import java.util.Map;
 public class DockerController {
 
     private final DockerService dockerService;
+    private final AuditService auditService;
 
-    public DockerController(DockerService dockerService) {
+    public DockerController(DockerService dockerService, AuditService auditService) {
         this.dockerService = dockerService;
+        this.auditService  = auditService;
     }
 
     @GetMapping("/containers")
@@ -30,8 +33,10 @@ public class DockerController {
     public ResponseEntity<Map<String, String>> start(@PathVariable String id) {
         try {
             dockerService.startContainer(id);
+            auditService.log("DOCKER_START", id, "OK", "");
             return ResponseEntity.ok(Map.of("result", "started"));
         } catch (Exception e) {
+            auditService.log("DOCKER_START", id, "ERROR", e.getMessage());
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
@@ -40,8 +45,10 @@ public class DockerController {
     public ResponseEntity<Map<String, String>> stop(@PathVariable String id) {
         try {
             dockerService.stopContainer(id);
+            auditService.log("DOCKER_STOP", id, "OK", "");
             return ResponseEntity.ok(Map.of("result", "stopped"));
         } catch (Exception e) {
+            auditService.log("DOCKER_STOP", id, "ERROR", e.getMessage());
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
@@ -50,8 +57,10 @@ public class DockerController {
     public ResponseEntity<Map<String, String>> restart(@PathVariable String id) {
         try {
             dockerService.restartContainer(id);
+            auditService.log("DOCKER_RESTART", id, "OK", "");
             return ResponseEntity.ok(Map.of("result", "restarted"));
         } catch (Exception e) {
+            auditService.log("DOCKER_RESTART", id, "ERROR", e.getMessage());
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
@@ -60,8 +69,10 @@ public class DockerController {
     public ResponseEntity<Map<String, String>> remove(@PathVariable String id) {
         try {
             dockerService.removeContainer(id);
+            auditService.log("DOCKER_REMOVE", id, "OK", "");
             return ResponseEntity.ok(Map.of("result", "removed"));
         } catch (Exception e) {
+            auditService.log("DOCKER_REMOVE", id, "ERROR", e.getMessage());
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
