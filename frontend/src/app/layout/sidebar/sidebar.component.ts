@@ -102,6 +102,7 @@ export class SidebarComponent {
     { icon: 'terminal',           label: 'Terminal',    path: '/terminal' },
     { icon: 'power_settings_new', label: 'iDRAC',       path: '/idrac' },
     { icon: 'bolt',               label: 'Acciones',    path: '/acciones' },
+    { icon: 'tune',               label: 'Systemd',     path: '/systemd' },
   ];
   systemItems: NavItem[] = [
     { icon: 'history',  label: 'Auditoría',       path: '/auditoria' },

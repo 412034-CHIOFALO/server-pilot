@@ -51,6 +51,10 @@ export const routes: Routes = [
         path: 'acciones',
         loadComponent: () => import('./features/runbooks/runbooks.component').then(m => m.RunbooksComponent)
       },
+      {
+        path: 'systemd',
+        loadComponent: () => import('./features/systemd/systemd.component').then(m => m.SystemdComponent)
+      },
     ]
   },
   { path: '**', redirectTo: '' }

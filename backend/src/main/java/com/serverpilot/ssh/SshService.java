@@ -102,4 +102,8 @@ public class SshService {
         sftp.connect(5000);
         return new SftpSession(session, sftp);
     }
+
+    public Session openJschSession() throws Exception {
+        return openSession();
+    }
 }
