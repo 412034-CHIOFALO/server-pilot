@@ -1,6 +1,8 @@
 package com.serverpilot.ssh;
 
 import com.jcraft.jsch.*;
+import com.serverpilot.settings.SettingsService;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -12,6 +14,7 @@ import java.nio.file.Path;
 @Service
 public class SshService {
 
+    // Fallback from properties; overridden by SettingsService on init
     @Value("${sp.ssh.host}")
     private String host;
 
@@ -24,7 +27,23 @@ public class SshService {
     @Value("${sp.ssh.privateKeyPath}")
     private String keyPath;
 
-    // Config getters — used by TerminalHandler and updated by SettingsService in Feature 2
+    private final SettingsService settingsService;
+
+    public SshService(SettingsService settingsService) {
+        this.settingsService = settingsService;
+    }
+
+    @PostConstruct
+    public void syncFromSettings() {
+        var ssh = settingsService.get().ssh;
+        if (ssh.host != null && !ssh.host.isBlank()) {
+            host     = ssh.host;
+            port     = ssh.port;
+            username = ssh.username;
+            keyPath  = ssh.keyPath;
+        }
+    }
+
     public String getHost()     { return host; }
     public int    getPort()     { return port; }
     public String getUsername() { return username; }
@@ -60,7 +79,6 @@ public class SshService {
 
             channel.connect(5000);
 
-            // wait for channel to close (command completes)
             long deadline = System.currentTimeMillis() + 30_000;
             while (!channel.isClosed() && System.currentTimeMillis() < deadline) {
                 try { Thread.sleep(100); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
