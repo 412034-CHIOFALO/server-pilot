@@ -1,6 +1,7 @@
-import { Component } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
@@ -106,7 +107,9 @@ import { AuthService } from '../auth.service';
           </div>
         }
 
-        <button mat-flat-button class="submit-btn" (click)="login()">Iniciar sesión</button>
+        <button mat-flat-button class="submit-btn" (click)="login()" [disabled]="loading()">
+          {{ loading() ? 'Verificando…' : 'Iniciar sesión' }}
+        </button>
       </div>
     </div>
   `
@@ -115,13 +118,35 @@ export class LoginComponent {
   username = '';
   password = '';
   showPass = false;
-  error = '';
+  error    = '';
+  loading  = signal(false);
 
-  constructor(private auth: AuthService, private router: Router) {}
+  constructor(private auth: AuthService, private router: Router, private http: HttpClient) {}
 
   login() {
     if (!this.username || !this.password) { this.error = 'Ingresá usuario y contraseña'; return; }
-    this.auth.login(this.username, this.password);
-    this.router.navigate(['/dashboard']);
+    this.loading.set(true);
+    this.error = '';
+    const creds = btoa(`${this.username}:${this.password}`);
+    this.http.post('/api/auth/ticket', {}, {
+      headers: new HttpHeaders({ Authorization: `Basic ${creds}` }),
+      responseType: 'json'
+    }).subscribe({
+      next: () => {
+        this.auth.login(this.username, this.password);
+        this.loading.set(false);
+        this.router.navigate(['/dashboard']);
+      },
+      error: (e) => {
+        this.loading.set(false);
+        if (e.status === 429) {
+          this.error = 'Demasiados intentos fallidos, esperá unos minutos.';
+        } else if (e.status === 401 || e.status === 403) {
+          this.error = 'Usuario o contraseña incorrectos.';
+        } else {
+          this.error = 'Error de conexión.';
+        }
+      }
+    });
   }
 }
