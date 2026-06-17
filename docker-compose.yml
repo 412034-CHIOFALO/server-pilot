@@ -1,0 +1,28 @@
+services:
+  server-pilot-backend:
+    build: ./backend
+    ports:
+      - "127.0.0.1:8090:8090"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ~/.ssh:/root/.ssh:ro
+      - server-pilot-data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - SP_USER=admin
+      - SP_PASS=changeme
+      - SP_SSH_USER=ubuntu
+      - SP_SSH_KEY=/root/.ssh/id_rsa
+    restart: always
+
+  server-pilot-frontend:
+    build: ./frontend
+    ports:
+      - "127.0.0.1:3000:80"
+    depends_on:
+      - server-pilot-backend
+    restart: always
+
+volumes:
+  server-pilot-data:
