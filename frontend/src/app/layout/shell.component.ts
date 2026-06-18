@@ -1,7 +1,8 @@
-import { Component, signal } from '@angular/core';
+import { Component } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { SidebarComponent } from './sidebar/sidebar.component';
 import { TopbarComponent } from './topbar/topbar.component';
+import { WsStatusService } from '../core/ws-status.service';
 
 @Component({
   selector: 'app-shell',
@@ -41,7 +42,7 @@ import { TopbarComponent } from './topbar/topbar.component';
         <app-sidebar />
       </aside>
       <div class="main">
-        <app-topbar [wsConnected]="wsConnected()" />
+        <app-topbar [wsConnected]="wsStatus.connected()" />
         <div class="content">
           <router-outlet />
         </div>
@@ -50,5 +51,5 @@ import { TopbarComponent } from './topbar/topbar.component';
   `
 })
 export class ShellComponent {
-  wsConnected = signal(false);
+  constructor(public wsStatus: WsStatusService) {}
 }

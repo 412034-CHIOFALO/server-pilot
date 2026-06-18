@@ -5,6 +5,7 @@ import { MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { Chart, registerables } from 'chart.js';
 import { RealtimeService } from '../../core/realtime.service';
 import { ApiService } from '../../core/api.service';
+import { WsStatusService } from '../../core/ws-status.service';
 import { UpdatesDialogComponent } from './updates-dialog.component';
 
 Chart.register(...registerables);
@@ -267,7 +268,12 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
   updatesLoading = signal(false);
   updatesError   = signal(false);
 
-  constructor(private rt: RealtimeService, private api: ApiService, private dialog: MatDialog) {}
+  constructor(
+    private rt: RealtimeService,
+    private api: ApiService,
+    private dialog: MatDialog,
+    private wsStatus: WsStatusService
+  ) {}
 
   ngOnInit() { this.connectWs(); this.loadUpdates(); }
   ngAfterViewInit() { this.initCharts(); }
@@ -286,14 +292,22 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private async connectWs() {
-    this.ws = await this.rt.openSocket('/ws/metrics');
-    this.ws.onmessage = (event) => {
-      const data: MetricsSnapshot = JSON.parse(event.data);
-      this.snapshot.set(data);
-      this.history.push(data);
-      if (this.history.length > this.MAX_POINTS) this.history.shift();
-      this.updateCharts();
-    };
+    try {
+      this.ws = await this.rt.openSocket('/ws/metrics');
+      this.ws.onopen    = () => this.wsStatus.setConnected(true);
+      this.ws.onmessage = (event) => {
+        this.wsStatus.setConnected(true);
+        const data: MetricsSnapshot = JSON.parse(event.data);
+        this.snapshot.set(data);
+        this.history.push(data);
+        if (this.history.length > this.MAX_POINTS) this.history.shift();
+        this.updateCharts();
+      };
+      this.ws.onclose = () => this.wsStatus.setConnected(false);
+      this.ws.onerror = () => this.wsStatus.setConnected(false);
+    } catch {
+      this.wsStatus.setConnected(false);
+    }
   }
 
   private chartOpts(color: string) {
@@ -354,5 +368,10 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
     return b + ' B/s';
   }
 
-  ngOnDestroy() { this.ws?.close(); this.cpuChart?.destroy(); this.ramChart?.destroy(); }
+  ngOnDestroy() {
+    this.wsStatus.setConnected(false);
+    this.ws?.close();
+    this.cpuChart?.destroy();
+    this.ramChart?.destroy();
+  }
 }

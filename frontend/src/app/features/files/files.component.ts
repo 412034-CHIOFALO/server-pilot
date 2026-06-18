@@ -1,12 +1,12 @@
-import { Component, OnInit, signal, computed, ViewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { HttpClient, HttpRequest, HttpEventType } from '@angular/common/http';
 import { ApiService } from '../../core/api.service';
 import { environment } from '../../../environments/environment';
-import { HttpClient } from '@angular/common/http';
-import { AuthService } from '../../core/auth/auth.service';
 
 interface FileEntry {
   name: string;
@@ -15,6 +15,14 @@ interface FileEntry {
   sizeBytes: number;
   mtimeEpoch: number;
   permissions: string;
+}
+
+interface UploadItem {
+  id: number;
+  name: string;
+  progress: number;
+  done: boolean;
+  error: string;
 }
 
 type ViewMode = 'list' | 'editor';
@@ -39,10 +47,10 @@ type ViewMode = 'list' | 'editor';
     }
     .action-btn:hover { background:var(--bg-hover); color:var(--text-primary); }
     .action-btn mat-icon { font-size:16px; width:16px; height:16px; }
-    .primary-btn {
-      background:var(--accent); color:#fff; border-color:var(--accent);
-    }
+    .primary-btn { background:var(--accent); color:#fff; border-color:var(--accent); }
     .primary-btn:hover { opacity:.85; }
+    .shared-btn { border-color:rgba(63,185,80,.4); color:var(--green); }
+    .shared-btn:hover { background:var(--green-glow); color:var(--green); border-color:var(--green); }
 
     .table-wrap {
       background:var(--bg-secondary); border:1px solid var(--border);
@@ -88,6 +96,39 @@ type ViewMode = 'list' | 'editor';
     .empty mat-icon { font-size:40px; width:40px; height:40px; display:block; margin:0 auto 12px; opacity:.3; }
     .loading { text-align:center; padding:24px; color:var(--text-muted); font-size:13px; }
     .err { color:var(--red); font-size:12px; margin-top:4px; }
+
+    .dropzone {
+      margin-top:16px; border:2px dashed var(--border-subtle);
+      border-radius:var(--radius-md); padding:32px 20px; text-align:center;
+      cursor:default; user-select:none;
+      transition:border-color .2s, background .2s, color .2s;
+      display:flex; flex-direction:column; align-items:center; gap:8px;
+      color:var(--text-muted);
+    }
+    .dropzone.dragover {
+      border-color:var(--accent); background:var(--accent-glow); color:var(--accent);
+    }
+    .dropzone mat-icon { font-size:38px; width:38px; height:38px; transition:transform .2s; }
+    .dropzone.dragover mat-icon { transform:scale(1.15); }
+    .dz-title { font-size:14px; font-weight:600; }
+    .dz-sub   { font-size:12px; }
+
+    .upload-list { margin-top:10px; display:flex; flex-direction:column; gap:6px; }
+    .upload-item {
+      background:var(--bg-secondary); border:1px solid var(--border);
+      border-radius:var(--radius-sm); padding:8px 12px;
+      display:grid; grid-template-columns:1fr auto auto; align-items:center; gap:10px; font-size:12px;
+    }
+    .upload-name { color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .upload-progress { display:flex; align-items:center; gap:8px; min-width:160px; }
+    .upload-track { flex:1; background:var(--bg-tertiary); border-radius:4px; height:4px; overflow:hidden; }
+    .upload-bar { height:100%; border-radius:4px; transition:width .15s; background:var(--accent); }
+    .upload-bar.done { background:var(--green); }
+    .upload-bar.upload-err-bar { background:var(--red); }
+    .upload-pct { width:34px; text-align:right; font-family:monospace; color:var(--text-secondary); font-size:11px; }
+    .upload-icon-ok  { color:var(--green);  display:flex; }
+    .upload-icon-err { color:var(--red);    display:flex; }
+    .upload-icon-ok mat-icon, .upload-icon-err mat-icon { font-size:16px; width:16px; height:16px; }
   `],
   template: `
     <div class="toolbar">
@@ -96,9 +137,15 @@ type ViewMode = 'list' | 'editor';
         <div class="btn-group">
           <label class="action-btn" style="cursor:pointer">
             <mat-icon>upload</mat-icon> Subir
-            <input #uploadInput type="file" style="display:none" (change)="uploadFile($event)">
+            <input type="file" multiple style="display:none" (change)="onFileInputChange($event)">
           </label>
-          <button class="action-btn" (click)="promptMkdir()"><mat-icon>create_new_folder</mat-icon> Carpeta</button>
+          <button class="action-btn" (click)="promptMkdir()">
+            <mat-icon>create_new_folder</mat-icon> Carpeta
+          </button>
+          <button class="action-btn shared-btn" (click)="navigate('/home/nico/compartida')"
+                  matTooltip="Ir a carpeta compartida">
+            <mat-icon>folder_shared</mat-icon> Compartida
+          </button>
           <button class="action-btn" (click)="navigate('/')"><mat-icon>home</mat-icon></button>
           @if (currentPath() !== '/') {
             <button class="action-btn" (click)="upLevel()"><mat-icon>arrow_upward</mat-icon> Subir</button>
@@ -185,21 +232,58 @@ type ViewMode = 'list' | 'editor';
           </table>
         }
       </div>
+
+      <div class="dropzone" [class.dragover]="isDragOver()"
+           (dragenter)="onDragEnter($event)"
+           (dragover)="onDragOver($event)"
+           (dragleave)="onDragLeave($event)"
+           (drop)="onDrop($event)">
+        <mat-icon>cloud_upload</mat-icon>
+        <span class="dz-title">{{ isDragOver() ? 'Soltar para subir' : 'Soltá archivos acá' }}</span>
+        <span class="dz-sub">Soporta múltiples archivos — se suben a la carpeta actual</span>
+      </div>
+
+      @if (uploads().length > 0) {
+        <div class="upload-list">
+          @for (u of uploads(); track u.id) {
+            <div class="upload-item">
+              <span class="upload-name" [matTooltip]="u.name">{{ u.name }}</span>
+              <div class="upload-progress">
+                <div class="upload-track">
+                  <div class="upload-bar"
+                       [class.done]="u.done"
+                       [class.upload-err-bar]="!!u.error"
+                       [style.width]="(u.error ? 100 : u.progress) + '%'">
+                  </div>
+                </div>
+                <span class="upload-pct">{{ u.error ? 'Error' : (u.done ? '100%' : u.progress + '%') }}</span>
+              </div>
+              @if (u.done && !u.error) {
+                <span class="upload-icon-ok"><mat-icon>check_circle</mat-icon></span>
+              } @else if (u.error) {
+                <span class="upload-icon-err" [matTooltip]="u.error"><mat-icon>error</mat-icon></span>
+              } @else {
+                <span style="width:16px"></span>
+              }
+            </div>
+          }
+        </div>
+      }
     }
-    <input #uploadInput type="file" style="display:none" (change)="uploadFile($event)">
   `
 })
 export class FilesComponent implements OnInit {
-  @ViewChild('uploadInput') uploadInput!: ElementRef<HTMLInputElement>;
-
-  currentPath = signal('/');
-  entries     = signal<FileEntry[]>([]);
-  loading     = signal(false);
-  error       = signal('');
-  saving      = signal(false);
-  view        = signal<ViewMode>('list');
-  editingPath = signal('');
+  currentPath   = signal('/');
+  entries       = signal<FileEntry[]>([]);
+  loading       = signal(false);
+  error         = signal('');
+  saving        = signal(false);
+  view          = signal<ViewMode>('list');
+  editingPath   = signal('');
   editorContent = '';
+  isDragOver    = signal(false);
+  uploads       = signal<UploadItem[]>([]);
+  private nextId = 0;
 
   breadcrumbs = computed(() => {
     const parts = this.currentPath().split('/').filter(p => p);
@@ -212,7 +296,11 @@ export class FilesComponent implements OnInit {
     return result;
   });
 
-  constructor(private api: ApiService, private auth: AuthService, private http: HttpClient) {}
+  constructor(
+    private api: ApiService,
+    private http: HttpClient,
+    private snackBar: MatSnackBar
+  ) {}
 
   ngOnInit() { this.navigate('/'); }
 
@@ -263,7 +351,6 @@ export class FilesComponent implements OnInit {
   }
 
   downloadFile(e: FileEntry) {
-    const creds = this.auth.getCredentials();
     const base = environment.apiBase || '';
     const url = `${base}/api/files/download?path=${encodeURIComponent(e.path)}`;
     const a = document.createElement('a');
@@ -274,18 +361,61 @@ export class FilesComponent implements OnInit {
     document.body.removeChild(a);
   }
 
-  uploadFile(event: Event) {
+  onFileInputChange(event: Event) {
     const input = event.target as HTMLInputElement;
     if (!input.files?.length) return;
-    const file = input.files[0];
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('path', this.currentPath());
-    this.http.post(`${environment.apiBase}/api/files/upload`, formData).subscribe({
-      next: () => { this.navigate(this.currentPath()); },
-      error: e => alert(e.error?.error || 'Error al subir')
-    });
+    this.uploadFiles(Array.from(input.files));
     input.value = '';
+  }
+
+  onDragEnter(e: DragEvent) { e.preventDefault(); this.isDragOver.set(true); }
+  onDragOver(e: DragEvent)  { e.preventDefault(); e.stopPropagation(); this.isDragOver.set(true); }
+  onDragLeave(e: DragEvent) { e.preventDefault(); this.isDragOver.set(false); }
+  onDrop(e: DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    this.isDragOver.set(false);
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    if (files.length) this.uploadFiles(files);
+  }
+
+  private uploadFiles(files: File[]) {
+    const items: UploadItem[] = files.map(f => ({
+      id: this.nextId++,
+      name: f.name,
+      progress: 0,
+      done: false,
+      error: ''
+    }));
+    this.uploads.update(list => [...list, ...items]);
+
+    for (const [item, file] of items.map((it, i) => [it, files[i]] as [UploadItem, File])) {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('path', this.currentPath());
+
+      const req = new HttpRequest('POST', `${environment.apiBase || ''}/api/files/upload`, formData, {
+        reportProgress: true
+      });
+
+      this.http.request(req).subscribe({
+        next: event => {
+          if (event.type === HttpEventType.UploadProgress && event.total) {
+            const pct = Math.round(100 * event.loaded / event.total);
+            this.uploads.update(list => list.map(u => u.id === item.id ? { ...u, progress: pct } : u));
+          } else if (event.type === HttpEventType.Response) {
+            this.uploads.update(list => list.map(u => u.id === item.id ? { ...u, progress: 100, done: true } : u));
+            this.navigate(this.currentPath());
+            setTimeout(() => this.uploads.update(list => list.filter(u => u.id !== item.id)), 3000);
+          }
+        },
+        error: err => {
+          const msg = err.error?.error || err.statusText || 'Error al subir el archivo';
+          this.uploads.update(list => list.map(u => u.id === item.id ? { ...u, error: msg } : u));
+          this.snackBar.open(`${file.name}: ${msg}`, 'Cerrar', { duration: 7000 });
+        }
+      });
+    }
   }
 
   promptMkdir() {
