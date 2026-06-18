@@ -216,7 +216,7 @@ export class SettingsComponent implements OnInit {
   creds  = { username: '', newPassword: '', confirmPassword: '' };
 
   idracHasPass = false;
-  prometheusUrl = `${window.location.protocol}//${window.location.hostname}:8090/actuator/prometheus`;
+  prometheusUrl = `${window.location.protocol}//${window.location.host}/actuator/prometheus`;
 
   sshMsg    = signal(''); sshMsgOk    = signal(false);
   idracMsg  = signal(''); idracMsgOk  = signal(false);

@@ -10,7 +10,8 @@ export class RealtimeService {
 
   async openSocket(path: string): Promise<WebSocket> {
     const apiBase = environment.apiBase || '';
-    const wsBase = environment.wsBase || `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const wsBase = `${proto}://${location.host}`;
 
     const ticketResp = await firstValueFrom(
       this.http.post<{ ticket: string }>(`${apiBase}/api/auth/ticket`, {})
