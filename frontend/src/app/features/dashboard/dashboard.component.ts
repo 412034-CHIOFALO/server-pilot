@@ -58,7 +58,14 @@ interface UpdateInfo { count: number; rebootRequired: boolean; packages: string[
       font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .8px;
       color: var(--text-secondary); margin-bottom: 14px; display:flex; align-items:center; gap:6px;
     }
-    .chart-box { position: relative; height: 160px; }
+    .chart-box {
+      position: relative;
+      width: 100%;
+      height: 200px;
+      overflow: hidden;
+    }
+    .chart-box canvas { display: block; }
+    @media (max-width: 700px) { .chart-box { height: 180px; } }
     .uptime-badge {
       display:inline-flex; align-items:center; gap:5px;
       background: rgba(188,140,255,.1); color: var(--purple);
