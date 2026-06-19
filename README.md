@@ -128,6 +128,10 @@ Ver [`.env.example`](.env.example) para la lista completa con descripción.
 |---|---|
 | ![files](docs/IDRAC.png) | ![systemd](docs/CONTAINERS.png) |
 
+| Notify | Systemd |
+|---|---|
+| ![files](docs/NTFY.png) | ![systemd](docs/SYSTEMD.png) |
+
 ---
 
 ---
