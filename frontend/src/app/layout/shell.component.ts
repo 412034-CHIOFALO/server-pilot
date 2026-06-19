@@ -2,7 +2,7 @@ import { Component } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { SidebarComponent } from './sidebar/sidebar.component';
 import { TopbarComponent } from './topbar/topbar.component';
-import { WsStatusService } from '../core/ws-status.service';
+import { MetricsStore } from '../core/metrics-store.service';
 
 @Component({
   selector: 'app-shell',
@@ -42,7 +42,7 @@ import { WsStatusService } from '../core/ws-status.service';
         <app-sidebar />
       </aside>
       <div class="main">
-        <app-topbar [wsConnected]="wsStatus.connected()" />
+        <app-topbar [wsConnected]="metricsStore.connected()" />
         <div class="content">
           <router-outlet />
         </div>
@@ -51,5 +51,5 @@ import { WsStatusService } from '../core/ws-status.service';
   `
 })
 export class ShellComponent {
-  constructor(public wsStatus: WsStatusService) {}
+  constructor(public metricsStore: MetricsStore) {}
 }
