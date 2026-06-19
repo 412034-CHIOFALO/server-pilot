@@ -4,6 +4,7 @@ import com.serverpilot.audit.AuditService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -11,14 +12,14 @@ import java.util.Map;
 public class IdracController {
 
     private final IdracConfigService configService;
-    private final IdracService idracService;
-    private final AuditService auditService;
+    private final IdracService       idracService;
+    private final AuditService       auditService;
 
     public IdracController(IdracConfigService configService, IdracService idracService,
                            AuditService auditService) {
-        this.configService  = configService;
-        this.idracService   = idracService;
-        this.auditService   = auditService;
+        this.configService = configService;
+        this.idracService  = idracService;
+        this.auditService  = auditService;
     }
 
     @GetMapping("/config")
@@ -51,20 +52,31 @@ public class IdracController {
 
     @PostMapping("/power/{action}")
     public ResponseEntity<Map<String, String>> powerAction(@PathVariable String action) {
-        String resetType = switch (action) {
-            case "on"            -> "On";
-            case "off"           -> "GracefulShutdown";
-            case "force-off"     -> "ForceOff";
-            case "restart"       -> "GracefulRestart";
-            case "force-restart" -> "ForceRestart";
+        // Map UI action names to ipmitool chassis power subcommands
+        String ipmiCmd = switch (action) {
+            case "on"            -> "on";    // Power on
+            case "off"           -> "soft";  // Graceful shutdown via ACPI
+            case "force-off"     -> "off";   // Immediate power cut
+            case "restart"       -> "cycle"; // Power cycle (graceful)
+            case "force-restart" -> "reset"; // Hard reset (no OS notification)
             default -> throw new IllegalArgumentException("Acción desconocida: " + action);
         };
         try {
-            idracService.powerAction(resetType);
-            auditService.log("IDRAC_POWER", action, "OK", resetType);
+            idracService.powerAction(ipmiCmd);
+            auditService.log("IDRAC_POWER", action, "OK", "ipmitool chassis power " + ipmiCmd);
             return ResponseEntity.ok(Map.of("result", "ok"));
         } catch (Exception e) {
             auditService.log("IDRAC_POWER", action, "ERROR", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/sensors")
+    public ResponseEntity<?> getSensors() {
+        try {
+            List<Map<String, String>> sensors = idracService.getSensors();
+            return ResponseEntity.ok(sensors);
+        } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }

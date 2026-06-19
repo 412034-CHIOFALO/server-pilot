@@ -146,7 +146,7 @@ import { ApiService } from '../../core/api.service';
             [disabled]="powerState()==='On' || !isConfigured() || busy()"
             (click)="action('on')">
             <mat-icon>power_settings_new</mat-icon>
-            <div><div>Encender</div><div style="font-size:11px;opacity:.6">Power On via Redfish</div></div>
+            <div><div>Encender</div><div style="font-size:11px;opacity:.6">Power On via IPMI</div></div>
           </button>
 
           <button class="pwr-btn neutral"
@@ -221,9 +221,9 @@ import { ApiService } from '../../core/api.service';
         </div>
 
         <div class="note">
-          Usa la API <strong>Redfish</strong> (iDRAC 7/8/9). El certificado SSL
-          autofirmado se acepta automáticamente. La contraseña se guarda en
-          <code>/data/idrac.json</code>.
+          Usa <strong>ipmitool</strong> via IPMI/LAN (compatible con iDRAC 7/8/9).
+          El comando se ejecuta en el host mediante SSH con <code>-I lanplus</code>.
+          Las credenciales se guardan en <code>/data/idrac.json</code>.
         </div>
       </div>
     </div>
