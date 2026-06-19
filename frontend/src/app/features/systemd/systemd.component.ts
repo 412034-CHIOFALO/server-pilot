@@ -77,6 +77,10 @@ interface UnitDTO { name: string; load: string; active: string; sub: string; des
     .empty { text-align:center; padding:60px; color:var(--text-muted); }
     .empty mat-icon { font-size:48px; width:48px; height:48px; display:block; margin:0 auto 12px; opacity:.25; }
     .loading { text-align:center; padding:40px; color:var(--text-muted); font-size:13px; }
+    @media (max-width: 640px) {
+      .col-load, .col-sub, .col-desc { display: none; }
+      .search-input { min-width: 120px; }
+    }
   `],
   template: `
     <div class="toolbar">
@@ -100,10 +104,10 @@ interface UnitDTO { name: string; load: string; active: string; sub: string; des
           <thead>
             <tr>
               <th>Unidad</th>
-              <th>Load</th>
+              <th class="col-load">Load</th>
               <th>Active</th>
-              <th>Sub</th>
-              <th>Descripción</th>
+              <th class="col-sub">Sub</th>
+              <th class="col-desc">Descripción</th>
               <th>Acciones</th>
             </tr>
           </thead>
@@ -111,10 +115,10 @@ interface UnitDTO { name: string; load: string; active: string; sub: string; des
             @for (u of filtered(); track u.name) {
               <tr>
                 <td><span class="unit-name">{{ u.name }}</span></td>
-                <td><span class="badge" [class]="u.load === 'loaded' ? 'active' : 'inactive'">{{ u.load }}</span></td>
+                <td class="col-load"><span class="badge" [class]="u.load === 'loaded' ? 'active' : 'inactive'">{{ u.load }}</span></td>
                 <td><span class="badge" [class]="activeBadge(u.active)">{{ u.active }}</span></td>
-                <td><span style="font-size:11px;color:var(--text-secondary)">{{ u.sub }}</span></td>
-                <td><div class="unit-desc" [title]="u.description">{{ u.description }}</div></td>
+                <td class="col-sub"><span style="font-size:11px;color:var(--text-secondary)">{{ u.sub }}</span></td>
+                <td class="col-desc"><div class="unit-desc" [title]="u.description">{{ u.description }}</div></td>
                 <td>
                   <div class="actions">
                     <button class="icon-btn green" matTooltip="Start"   (click)="doAction(u, 'start')"><mat-icon>play_arrow</mat-icon></button>

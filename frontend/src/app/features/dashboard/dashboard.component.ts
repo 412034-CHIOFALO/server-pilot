@@ -58,6 +58,7 @@ interface UpdateInfo { count: number; rebootRequired: boolean; packages: string[
       font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .8px;
       color: var(--text-secondary); margin-bottom: 14px; display:flex; align-items:center; gap:6px;
     }
+    .chart-box { position: relative; height: 160px; }
     .uptime-badge {
       display:inline-flex; align-items:center; gap:5px;
       background: rgba(188,140,255,.1); color: var(--purple);
@@ -188,14 +189,14 @@ interface UpdateInfo { count: number; rebootRequired: boolean; packages: string[
           <mat-icon style="font-size:14px;width:14px;height:14px;color:var(--accent)">show_chart</mat-icon>
           CPU % — últimas muestras
         </div>
-        <canvas #cpuChart style="max-height:160px"></canvas>
+        <div class="chart-box"><canvas #cpuChart></canvas></div>
       </div>
       <div class="chart-card">
         <div class="chart-title">
           <mat-icon style="font-size:14px;width:14px;height:14px;color:var(--green)">show_chart</mat-icon>
           RAM % — últimas muestras
         </div>
-        <canvas #ramChart style="max-height:160px"></canvas>
+        <div class="chart-box"><canvas #ramChart></canvas></div>
       </div>
     </div>
 
@@ -220,7 +221,7 @@ interface UpdateInfo { count: number; rebootRequired: boolean; packages: string[
             CPU % — {{ range() }}
             @if (historyLoading()) { <span style="font-size:10px;color:var(--text-muted);margin-left:4px">cargando…</span> }
           </div>
-          <canvas #cpuHistCanvas style="max-height:160px"></canvas>
+          <div class="chart-box"><canvas #cpuHistCanvas></canvas></div>
         </div>
         <div class="chart-card">
           <div class="chart-title">
@@ -228,7 +229,7 @@ interface UpdateInfo { count: number; rebootRequired: boolean; packages: string[
             RAM % — {{ range() }}
             @if (historyLoading()) { <span style="font-size:10px;color:var(--text-muted);margin-left:4px">cargando…</span> }
           </div>
-          <canvas #ramHistCanvas style="max-height:160px"></canvas>
+          <div class="chart-box"><canvas #ramHistCanvas></canvas></div>
         </div>
       </div>
     </div>
@@ -303,7 +304,7 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
       borderWidth: 2, pointRadius: 0, fill: true, tension: 0.4
     });
     const liveOpts = (c: string) => ({
-      responsive: true, maintainAspectRatio: true, animation: false as const,
+      responsive: true, maintainAspectRatio: false, animation: false as const,
       plugins: { legend: { display: false } },
       scales: {
         y: { min: 0, max: 100, grid: { color: 'rgba(48,54,61,.5)' }, ticks: { color: '#8b949e', font: { size: 11 }, maxTicksLimit: 5 } },
@@ -321,7 +322,7 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
       borderWidth: 2, pointRadius: 0, fill: true, tension: 0.4
     });
     const histOpts = (c: string) => ({
-      responsive: true, maintainAspectRatio: true, animation: false as const,
+      responsive: true, maintainAspectRatio: false, animation: false as const,
       plugins: { legend: { display: false } },
       scales: {
         y: { min: 0, max: 100, grid: { color: 'rgba(48,54,61,.5)' }, ticks: { color: '#8b949e', font: { size: 11 }, maxTicksLimit: 5 } },

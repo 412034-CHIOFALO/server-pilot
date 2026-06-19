@@ -66,18 +66,21 @@ const TEXT_EXTS  = new Set([
 
     .table-wrap {
       background:var(--bg-secondary); border:1px solid var(--border);
-      border-radius:var(--radius-md); overflow:hidden;
+      border-radius:var(--radius-md); overflow-x:auto;
     }
-    table { width:100%; border-collapse:collapse; font-size:13px; }
+    table { width:100%; border-collapse:collapse; font-size:13px; min-width:420px; }
     thead tr { background:var(--bg-tertiary); }
     th {
       padding:9px 14px; text-align:left;
       font-size:10px; font-weight:600; letter-spacing:.6px; text-transform:uppercase;
-      color:var(--text-muted); border-bottom:1px solid var(--border);
+      color:var(--text-muted); border-bottom:1px solid var(--border); white-space:nowrap;
     }
     td { padding:9px 14px; border-bottom:1px solid var(--border-subtle); vertical-align:middle; }
     tr:last-child td { border-bottom:none; }
     tr:hover td { background:var(--bg-hover); }
+    @media (max-width: 640px) {
+      .col-perms, .col-date { display: none; }
+    }
     .file-name { display:flex; align-items:center; gap:8px; }
     .file-icon { font-size:18px; width:18px; height:18px; }
     .dir-icon  { color:var(--accent); }
@@ -279,7 +282,7 @@ const TEXT_EXTS  = new Set([
           <table>
             <thead>
               <tr>
-                <th>Nombre</th><th>Tamaño</th><th>Modificado</th><th>Permisos</th><th>Acciones</th>
+                <th>Nombre</th><th>Tamaño</th><th class="col-date">Modificado</th><th class="col-perms">Permisos</th><th>Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -299,8 +302,8 @@ const TEXT_EXTS  = new Set([
                     </div>
                   </td>
                   <td class="size">{{ e.type === 'dir' ? '—' : formatSize(e.sizeBytes) }}</td>
-                  <td class="date">{{ formatDate(e.mtimeEpoch) }}</td>
-                  <td class="size">{{ e.permissions }}</td>
+                  <td class="date col-date">{{ formatDate(e.mtimeEpoch) }}</td>
+                  <td class="size col-perms">{{ e.permissions }}</td>
                   <td>
                     <div class="row-actions">
                       @if (e.type === 'file') {

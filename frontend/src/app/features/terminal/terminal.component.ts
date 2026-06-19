@@ -36,7 +36,10 @@ import { RealtimeService } from '../../core/realtime.service';
 
     .term-wrapper {
       border:1px solid var(--border); border-radius:var(--radius-md); overflow:hidden;
-      background:#0d1117; height:calc(100vh - 188px);
+      background:#0d1117; height:calc(100vh - 200px);
+    }
+    @media (max-width: 640px) {
+      .term-wrapper { height:calc(100vh - 190px); }
     }
     .term-titlebar {
       display:flex; align-items:center; gap:8px;

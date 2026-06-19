@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, output } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 
@@ -9,12 +9,12 @@ interface NavItem { icon: string; label: string; path: string; }
   standalone: true,
   imports: [RouterLink, RouterLinkActive, MatIconModule],
   styles: [`
-    :host { display:flex; flex-direction:column; height:100%; }
+    :host { display:flex; flex-direction:column; height:100%; overflow:hidden; }
     .logo {
       padding: 20px 16px 16px;
       display: flex; align-items: center; gap: 10px;
       border-bottom: 1px solid #21262d;
-      margin-bottom: 8px;
+      margin-bottom: 8px; flex-shrink: 0;
     }
     .logo-icon {
       width: 34px; height: 34px;
@@ -36,22 +36,19 @@ interface NavItem { icon: string; label: string; path: string; }
     }
     a {
       display: flex; align-items: center; gap: 10px;
-      padding: 9px 10px;
-      border-radius: 8px;
-      text-decoration: none;
-      color: #8b949e;
-      font-size: 13px; font-weight: 500;
+      padding: 10px 10px; min-height: 44px;
+      border-radius: 8px; text-decoration: none;
+      color: #8b949e; font-size: 13px; font-weight: 500;
       transition: background .15s, color .15s;
-      margin-bottom: 2px;
-      cursor: pointer;
+      margin-bottom: 2px; cursor: pointer;
     }
     a:hover { background: #21262d; color: #e6edf3; }
     a.active { background: rgba(88,166,255,.12); color: #58a6ff; }
     a.active mat-icon { color: #58a6ff; }
-    mat-icon { font-size: 18px; width: 18px; height: 18px; color: inherit; transition: color .15s; }
+    mat-icon { font-size: 18px; width: 18px; height: 18px; color: inherit; transition: color .15s; flex-shrink: 0; }
 
     .footer {
-      padding: 12px 16px;
+      padding: 12px 16px; flex-shrink: 0;
       border-top: 1px solid #21262d;
       font-size: 10px; color: #484f58;
       text-align: center; letter-spacing:.3px;
@@ -69,19 +66,19 @@ interface NavItem { icon: string; label: string; path: string; }
     <nav>
       <div class="section-label">Monitoreo</div>
       @for (item of monitorItems; track item.path) {
-        <a [routerLink]="item.path" routerLinkActive="active">
+        <a [routerLink]="item.path" routerLinkActive="active" (click)="navClick.emit()">
           <mat-icon>{{ item.icon }}</mat-icon>{{ item.label }}
         </a>
       }
       <div class="section-label">Infraestructura</div>
       @for (item of infraItems; track item.path) {
-        <a [routerLink]="item.path" routerLinkActive="active">
+        <a [routerLink]="item.path" routerLinkActive="active" (click)="navClick.emit()">
           <mat-icon>{{ item.icon }}</mat-icon>{{ item.label }}
         </a>
       }
       <div class="section-label">Sistema</div>
       @for (item of systemItems; track item.path) {
-        <a [routerLink]="item.path" routerLinkActive="active">
+        <a [routerLink]="item.path" routerLinkActive="active" (click)="navClick.emit()">
           <mat-icon>{{ item.icon }}</mat-icon>{{ item.label }}
         </a>
       }
@@ -91,6 +88,8 @@ interface NavItem { icon: string; label: string; path: string; }
   `
 })
 export class SidebarComponent {
+  navClick = output<void>();
+
   monitorItems: NavItem[] = [
     { icon: 'dashboard',     label: 'Dashboard',  path: '/dashboard' },
     { icon: 'monitor_heart', label: 'Services',   path: '/services' },

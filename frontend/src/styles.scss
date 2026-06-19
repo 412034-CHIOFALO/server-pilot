@@ -213,3 +213,37 @@ code { font-family: 'JetBrains Mono', 'Cascadia Code', monospace; color: var(--a
 .mat-mdc-dialog-container .mdc-dialog__surface { background: var(--bg-secondary) !important; }
 .mat-expansion-panel { box-shadow: none !important; }
 .mat-expansion-panel-header { padding: 0 16px !important; }
+
+/* Mat-sidenav dark theme */
+.mat-drawer-container { background: var(--bg-primary) !important; }
+.mat-drawer { background: var(--bg-secondary) !important; }
+
+/* ── Responsive global ── */
+@media (max-width: 640px) {
+  .page-title { font-size: 17px; }
+  .page-title mat-icon { font-size: 19px; width: 19px; height: 19px; }
+}
+
+/* Touch-friendly minimum target for small buttons */
+.icon-btn, .pwr-btn, .kill-btn, .action-btn {
+  min-height: 36px;
+}
+@media (max-width: 640px) {
+  .icon-btn, .kill-btn {
+    min-width: 44px; min-height: 44px;
+  }
+}
+
+/* Table overflow — applied globally to any .table-wrap */
+.table-wrap { overflow-x: auto; }
+
+/* Hide columns on mobile via utility classes */
+@media (max-width: 640px) {
+  .hide-mobile { display: none !important; }
+}
+
+/* Mat tab labels scroll on mobile */
+@media (max-width: 640px) {
+  .mat-mdc-tab-labels { flex-wrap: nowrap; overflow-x: auto; }
+  .mat-mdc-tab { min-width: unset !important; padding: 0 12px !important; flex-shrink: 0; }
+}

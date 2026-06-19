@@ -24,6 +24,7 @@ import { Router } from '@angular/router';
       display: flex; flex-direction: column; gap: 14px;
     }
     .row-2 { display: grid; grid-template-columns: 1fr 120px; gap: 12px; }
+    @media (max-width: 480px) { .row-2 { grid-template-columns: 1fr; } }
     .action-row { display: flex; gap: 10px; align-items: center; margin-top: 4px; flex-wrap: wrap; }
     .save-btn {
       padding: 9px 22px; border-radius: 8px; border: none;

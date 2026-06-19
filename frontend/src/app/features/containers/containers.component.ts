@@ -37,7 +37,8 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
     .chevron { transition:transform .2s; color:var(--text-muted); font-size:18px; width:18px; height:18px; }
     .chevron.open { transform:rotate(90deg); }
 
-    .container-list { background:var(--bg-primary); }
+    .container-scroll { overflow-x:auto; }
+    .container-list { background:var(--bg-primary); min-width:520px; }
     .container-row {
       display:grid; grid-template-columns:1fr 1.2fr 100px 1fr auto;
       align-items:center; gap:16px;
@@ -47,7 +48,7 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
     .container-row:hover { background:var(--bg-tertiary); }
     .col-header {
       display:grid; grid-template-columns:1fr 1.2fr 100px 1fr auto;
-      gap:16px; padding:8px 16px;
+      gap:16px; padding:8px 16px; min-width:520px;
       background:var(--bg-secondary); border-top:1px solid var(--border-subtle);
     }
     .col-header span { font-size:10px; font-weight:600; letter-spacing:.6px; text-transform:uppercase; color:var(--text-muted); }
@@ -112,6 +113,7 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
           </div>
 
           @if (group.open) {
+            <div class="container-scroll">
             <div class="col-header">
               <span>Nombre</span><span>Imagen</span><span>Estado</span><span>Puertos</span><span>Acciones</span>
             </div>
@@ -157,6 +159,7 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
                   </div>
                 }
               }
+            </div>
             </div>
           }
         </div>
