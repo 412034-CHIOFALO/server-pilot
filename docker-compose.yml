@@ -10,10 +10,11 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      - SP_USER=admin
-      - SP_PASS=changeme
-      - SP_SSH_USER=ubuntu
-      - SP_SSH_KEY=/root/.ssh/id_rsa
+      - SP_USER=${SP_USER:-admin}
+      - SP_PASS=${SP_PASS:-changeme}
+      - SP_SSH_HOST=${SP_SSH_HOST:-host.docker.internal}
+      - SP_SSH_USER=${SP_SSH_USER:-ubuntu}
+      - SP_SSH_KEY=${SP_SSH_KEY:-/root/.ssh/id_rsa}
     pid: "host"
     restart: always
 

@@ -1,5 +1,31 @@
+# Node
 frontend/node_modules/
 frontend/.angular/
 frontend/dist/
+
+# Java build
 backend/target/
 *.class
+*.jar
+
+# Runtime data — never commit
+/data/
+
+# Secrets & local overrides
+.env
+.env.local
+.env.*.local
+docker-compose.override.yml
+*.security
+
+# IDE / local tooling
+.idea/
+.vscode/
+.claude/
+*.iml
+*.suo
+*.user
+
+# OS
+.DS_Store
+Thumbs.db

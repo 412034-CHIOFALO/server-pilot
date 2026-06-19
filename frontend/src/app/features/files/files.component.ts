@@ -28,8 +28,8 @@ interface UploadItem {
 type ViewMode = 'list' | 'editor' | 'image' | 'binary';
 type FileKind = 'image' | 'text' | 'binary';
 
-const SHARED_PATH = '/home/nico/compartida';
-const HOME_PATH   = '/home/nico';
+const DEFAULT_HOME   = '/home/ubuntu';
+const DEFAULT_SHARED = '/home/ubuntu/shared';
 
 const IMAGE_EXTS = new Set(['jpg','jpeg','png','gif','webp','bmp','svg']);
 const TEXT_EXTS  = new Set([
@@ -182,11 +182,11 @@ const TEXT_EXTS  = new Set([
           <button class="action-btn" (click)="promptMkdir()">
             <mat-icon>create_new_folder</mat-icon> Carpeta
           </button>
-          <button class="action-btn shared-btn" (click)="navigate(SHARED_PATH)"
+          <button class="action-btn shared-btn" (click)="navigate(sharedPath)"
                   matTooltip="Ir a carpeta compartida">
             <mat-icon>folder_shared</mat-icon> Compartida
           </button>
-          <button class="action-btn" (click)="navigate(HOME_PATH)"><mat-icon>home</mat-icon></button>
+          <button class="action-btn" (click)="navigate(homePath)"><mat-icon>home</mat-icon></button>
           @if (currentPath() !== '/') {
             <button class="action-btn" (click)="upLevel()">
               <mat-icon>arrow_upward</mat-icon> Subir
@@ -343,7 +343,7 @@ const TEXT_EXTS  = new Set([
         <span class="dz-title">
           {{ isDragOver() ? 'Soltar para subir a Compartida' : 'Soltá archivos acá — se suben a la Carpeta Compartida' }}
         </span>
-        <span class="dz-sub">Destino fijo: {{ SHARED_PATH }}</span>
+        <span class="dz-sub">Destino fijo: {{ sharedPath }}</span>
       </div>
 
       @if (uploads().length > 0) {
@@ -376,8 +376,8 @@ const TEXT_EXTS  = new Set([
   `
 })
 export class FilesComponent implements OnInit, OnDestroy {
-  readonly SHARED_PATH = SHARED_PATH;
-  readonly HOME_PATH   = HOME_PATH;
+  sharedPath = DEFAULT_SHARED;
+  homePath   = DEFAULT_HOME;
 
   currentPath   = signal('/');
   entries       = signal<FileEntry[]>([]);
@@ -411,7 +411,17 @@ export class FilesComponent implements OnInit, OnDestroy {
     private snackBar: MatSnackBar
   ) {}
 
-  ngOnInit()    { this.navigate(HOME_PATH); }
+  ngOnInit() {
+    this.api.get<any>('/api/settings').subscribe({
+      next: s => {
+        const user     = s.ssh?.username || 'ubuntu';
+        this.homePath   = `/home/${user}`;
+        this.sharedPath = `/home/${user}/shared`;
+        this.navigate(this.homePath);
+      },
+      error: () => this.navigate(this.homePath)
+    });
+  }
   ngOnDestroy() { this.revokeImageUrl(); }
 
   navigate(path: string) {
@@ -519,7 +529,7 @@ export class FilesComponent implements OnInit, OnDestroy {
     e.preventDefault(); e.stopPropagation();
     this.isDragOver.set(false);
     const files = Array.from(e.dataTransfer?.files ?? []);
-    if (files.length) this.uploadFiles(files, SHARED_PATH);
+    if (files.length) this.uploadFiles(files, this.sharedPath);
   }
 
   private uploadFiles(files: File[], destPath: string) {
