@@ -2,7 +2,7 @@
 
 Panel de administración de servidores Linux, autoalojado y accesible desde cualquier lugar vía Cloudflare Tunnel. Permite gestionar métricas en tiempo real, terminal SSH, contenedores Docker, servicios systemd, archivos SFTP, runbooks y hardware (iDRAC/IPMI) desde una única interfaz web.
 
-![dashboard](docs/dashboard.png)
+![dashboard](docs/DASHBOARD.png)
 
 ---
 
@@ -122,14 +122,22 @@ Ver [`.env.example`](.env.example) para la lista completa con descripción.
 
 | Dashboard | Terminal SSH |
 |---|---|
-| ![dashboard](docs/dashboard.png) | ![terminal](docs/terminal.png) |
+| ![dashboard](docs/DASHBOARD.png) | ![terminal](docs/TERMINAL.png) |
 
-| File Manager | Systemd |
+| IDRAC | CONTAINERS |
 |---|---|
-| ![files](docs/files.png) | ![systemd](docs/systemd.png) |
+| ![files](docs/IDRAC.png) | ![systemd](docs/CONTAINERS.png) |
 
 ---
 
-## Licencia
+---
 
-MIT
+## 👤 Autor
+
+**Nicolás Mauricio Chiofalo** 
+
+---
+
+## 📄 Licencia
+
+Proyecto personal. Todos los derechos reservados al autor.
