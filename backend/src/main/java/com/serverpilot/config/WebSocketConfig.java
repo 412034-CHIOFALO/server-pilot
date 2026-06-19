@@ -1,6 +1,7 @@
 package com.serverpilot.config;
 
 import com.serverpilot.auth.TicketHandshakeInterceptor;
+import com.serverpilot.docker.DockerExecHandler;
 import com.serverpilot.docker.DockerLogsHandler;
 import com.serverpilot.metrics.MetricsSocketHandler;
 import com.serverpilot.systemd.JournalHandler;
@@ -17,17 +18,20 @@ public class WebSocketConfig implements WebSocketConfigurer {
     private final MetricsSocketHandler metricsSocketHandler;
     private final TerminalHandler terminalHandler;
     private final DockerLogsHandler dockerLogsHandler;
+    private final DockerExecHandler dockerExecHandler;
     private final JournalHandler journalHandler;
     private final TicketHandshakeInterceptor ticketHandshakeInterceptor;
 
     public WebSocketConfig(MetricsSocketHandler metricsSocketHandler,
                            TerminalHandler terminalHandler,
                            DockerLogsHandler dockerLogsHandler,
+                           DockerExecHandler dockerExecHandler,
                            JournalHandler journalHandler,
                            TicketHandshakeInterceptor ticketHandshakeInterceptor) {
         this.metricsSocketHandler = metricsSocketHandler;
         this.terminalHandler = terminalHandler;
         this.dockerLogsHandler = dockerLogsHandler;
+        this.dockerExecHandler = dockerExecHandler;
         this.journalHandler = journalHandler;
         this.ticketHandshakeInterceptor = ticketHandshakeInterceptor;
     }
@@ -43,6 +47,10 @@ public class WebSocketConfig implements WebSocketConfigurer {
             .setAllowedOrigins("*");
 
         registry.addHandler(dockerLogsHandler, "/ws/docker/logs/**")
+            .addInterceptors(ticketHandshakeInterceptor)
+            .setAllowedOrigins("*");
+
+        registry.addHandler(dockerExecHandler, "/ws/docker/exec/**")
             .addInterceptors(ticketHandshakeInterceptor)
             .setAllowedOrigins("*");
 

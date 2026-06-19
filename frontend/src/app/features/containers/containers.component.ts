@@ -6,6 +6,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
 import { RealtimeService } from '../../core/realtime.service';
+import { ContainerConsoleComponent } from './container-console.component';
 
 interface Container { id:string; shortId:string; name:string; image:string; status:string; state:string; ports:string[]; project:string; }
 interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
@@ -13,7 +14,7 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
 @Component({
   selector: 'app-containers',
   standalone: true,
-  imports: [CommonModule, MatIconModule, MatButtonModule, MatTooltipModule, FormsModule],
+  imports: [CommonModule, MatIconModule, MatButtonModule, MatTooltipModule, FormsModule, ContainerConsoleComponent],
   styles: [`
     .toolbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
     .filter-tabs { display:flex; gap:4px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:8px; padding:3px; }
@@ -98,6 +99,14 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
       </div>
     </div>
 
+    @if (consoleContainer(); as cc) {
+      <app-container-console
+        [containerId]="cc.id"
+        [containerName]="cc.name"
+        (closed)="closeConsole()">
+      </app-container-console>
+    }
+
     @if (loading()) {
       <div class="empty"><mat-icon>inventory_2</mat-icon>Cargando contenedores...</div>
     } @else if (groups().length === 0) {
@@ -140,6 +149,11 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
                       [style.color]="expandedId()===c.id ? 'var(--accent)' : ''">
                       <mat-icon>article</mat-icon>
                     </button>
+                    <button class="icon-btn" matTooltip="Consola" (click)="openConsole(c)"
+                      [disabled]="c.state!=='running'"
+                      [style.color]="consoleContainer()?.id===c.id ? 'var(--accent)' : ''">
+                      <mat-icon>terminal</mat-icon>
+                    </button>
                     <button class="icon-btn danger" matTooltip="Eliminar" (click)="confirmRemove(c)">
                       <mat-icon>delete</mat-icon>
                     </button>
@@ -173,6 +187,7 @@ export class ContainersComponent implements OnInit, OnDestroy {
   loading = signal(true);
   expandedId = signal('');
   logsText = signal('');
+  consoleContainer = signal<Container | null>(null);
 
   private logsWs?: WebSocket;
   private interval?: ReturnType<typeof setInterval>;
@@ -238,6 +253,9 @@ export class ContainersComponent implements OnInit, OnDestroy {
   }
 
   closeLogs() { this.logsWs?.close(); this.expandedId.set(''); this.logsText.set(''); }
+
+  openConsole(c: Container) { this.consoleContainer.set(c); }
+  closeConsole() { this.consoleContainer.set(null); }
 
   ngOnDestroy() { clearInterval(this.interval); this.logsWs?.close(); }
 }
