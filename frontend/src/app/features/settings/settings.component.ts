@@ -6,6 +6,8 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatChipsModule, MatChipInputEvent } from '@angular/material/chips';
+import { COMMA, ENTER } from '@angular/cdk/keycodes';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { Router } from '@angular/router';
@@ -14,7 +16,7 @@ import { Router } from '@angular/router';
   selector: 'app-settings',
   standalone: true,
   imports: [CommonModule, FormsModule, MatIconModule, MatTabsModule,
-            MatFormFieldModule, MatInputModule, MatSlideToggleModule],
+            MatFormFieldModule, MatInputModule, MatSlideToggleModule, MatChipsModule],
   styles: [`
     .settings-wrap { max-width: 680px; }
     mat-form-field { width: 100%; }
@@ -44,6 +46,10 @@ import { Router } from '@angular/router';
     .msg.error { color: var(--red); }
     .note { font-size: 12px; color: var(--text-muted); line-height: 1.6; padding-top: 10px; border-top: 1px solid var(--border-subtle); }
     .toggle-row { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--text-secondary); }
+    .section-label {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .6px; color: var(--text-muted);
+    }
   `],
   template: `
     <h2 class="page-title" style="margin-bottom:24px"><mat-icon>settings</mat-icon> Configuración</h2>
@@ -126,14 +132,17 @@ import { Router } from '@angular/router';
 
         <!-- Notificaciones -->
         <mat-tab label="Notificaciones">
+
+          <!-- Webhook global -->
           <div class="section-card">
+            <div class="section-label">Webhook de Notificaciones</div>
             <mat-form-field appearance="outline">
               <mat-label>Webhook URL</mat-label>
               <input matInput [(ngModel)]="alerts.url" placeholder="https://hooks.slack.com/...">
             </mat-form-field>
             <mat-form-field appearance="outline">
               <mat-label>Tipo</mat-label>
-              <input matInput [(ngModel)]="alerts.type" placeholder="webhook / slack / discord">
+              <input matInput [(ngModel)]="alerts.type" placeholder="webhook / ntfy / slack / discord">
             </mat-form-field>
             <div class="action-row">
               <button class="save-btn" (click)="saveAlerts()" [disabled]="saving()">
@@ -147,6 +156,52 @@ import { Router } from '@angular/router';
               }
             </div>
           </div>
+
+          <!-- Alertas de contenedores -->
+          <div class="section-card">
+            <div class="section-label">Alertas de Contenedores</div>
+            <div class="toggle-row">
+              <mat-slide-toggle [(ngModel)]="containerAlerts.enabled" color="primary">
+                Vigilar cambios de estado
+              </mat-slide-toggle>
+            </div>
+            <mat-form-field appearance="outline">
+              <mat-label>Contenedores excluidos (opcional)</mat-label>
+              <mat-chip-grid #excludeGrid>
+                @for (name of containerAlerts.excludedNames; track name) {
+                  <mat-chip-row (removed)="removeExclude(name)">
+                    {{ name }}
+                    <button matChipRemove aria-label="Eliminar"><mat-icon>cancel</mat-icon></button>
+                  </mat-chip-row>
+                }
+                <input
+                  placeholder="nombre-de-contenedor…"
+                  [matChipInputFor]="excludeGrid"
+                  [matChipInputSeparatorKeyCodes]="separatorKeys"
+                  (matChipInputTokenEnd)="addExclude($event)">
+              </mat-chip-grid>
+              <mat-hint>Presioná Enter o coma para agregar</mat-hint>
+            </mat-form-field>
+            <div class="action-row">
+              <button class="save-btn" (click)="saveContainerAlerts()" [disabled]="saving()">
+                {{ saving() ? 'Guardando...' : 'Guardar' }}
+              </button>
+              <button class="test-btn" (click)="testContainerAlerts()" [disabled]="testing()">
+                {{ testing() ? 'Probando...' : 'Probar' }}
+              </button>
+              @if (containerAlertsMsg()) {
+                <span class="msg" [class]="containerAlertsMsgOk() ? 'ok' : 'error'">
+                  {{ containerAlertsMsg() }}
+                </span>
+              }
+            </div>
+            <div class="note">
+              Usa la URL/tipo de webhook configurada arriba. Notifica cuando un contenedor
+              se detiene, vuelve a iniciar o pasa a estado unhealthy. La primera ejecución
+              registra el estado base sin enviar notificaciones.
+            </div>
+          </div>
+
         </mat-tab>
 
         <!-- Observabilidad -->
@@ -215,18 +270,22 @@ export class SettingsComponent implements OnInit {
   idrac  = { enabled: false, host: '', username: '', password: '' };
   alerts = { url: '', type: 'webhook' };
   creds  = { username: '', newPassword: '', confirmPassword: '' };
+  containerAlerts = { enabled: true, excludedNames: [] as string[] };
+
+  readonly separatorKeys: number[] = [ENTER, COMMA];
 
   idracHasPass = false;
   prometheusUrl = `${window.location.protocol}//${window.location.host}/actuator/prometheus`;
 
-  sshMsg    = signal(''); sshMsgOk    = signal(false);
-  idracMsg  = signal(''); idracMsgOk  = signal(false);
-  alertsMsg = signal(''); alertsMsgOk = signal(false);
-  credsMsg  = signal(''); credsMsgOk  = signal(false);
+  sshMsg              = signal(''); sshMsgOk              = signal(false);
+  idracMsg            = signal(''); idracMsgOk            = signal(false);
+  alertsMsg           = signal(''); alertsMsgOk           = signal(false);
+  credsMsg            = signal(''); credsMsgOk            = signal(false);
+  containerAlertsMsg  = signal(''); containerAlertsMsgOk  = signal(false);
 
   constructor(private api: ApiService, private auth: AuthService, private router: Router) {}
 
-  ngOnInit() { this.load(); }
+  ngOnInit() { this.load(); this.loadContainerAlerts(); }
 
   load() {
     this.api.get<any>('/api/settings').subscribe({ next: s => {
@@ -236,6 +295,17 @@ export class SettingsComponent implements OnInit {
       if (s.auth)   this.creds.username = s.auth.username;
     }});
   }
+
+  loadContainerAlerts() {
+    this.api.get<any>('/api/containers/alerts/config').subscribe({
+      next: cfg => {
+        this.containerAlerts.enabled       = cfg.enabled ?? true;
+        this.containerAlerts.excludedNames = cfg.excludedNames ?? [];
+      }
+    });
+  }
+
+  // ── save / test methods ──────────────────────────────────────────────────
 
   saveSsh() {
     this.saving.set(true);
@@ -258,6 +328,20 @@ export class SettingsComponent implements OnInit {
     this.api.put('/api/alerts/config', this.alerts).subscribe({
       next: () => { this.saving.set(false); this.showMsg('alertsMsg', 'alertsMsgOk', 'Guardado', true); },
       error: () => { this.saving.set(false); this.showMsg('alertsMsg', 'alertsMsgOk', 'Error al guardar', false); }
+    });
+  }
+
+  saveContainerAlerts() {
+    this.saving.set(true);
+    this.api.put('/api/containers/alerts/config', this.containerAlerts).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.showMsg('containerAlertsMsg', 'containerAlertsMsgOk', 'Guardado', true);
+      },
+      error: () => {
+        this.saving.set(false);
+        this.showMsg('containerAlertsMsg', 'containerAlertsMsgOk', 'Error al guardar', false);
+      }
     });
   }
 
@@ -299,6 +383,36 @@ export class SettingsComponent implements OnInit {
       next: r => { this.testing.set(false); this.showMsg('alertsMsg', 'alertsMsgOk', r.result + (r.detail ? ': ' + r.detail : ''), r.result === 'OK'); },
       error: () => { this.testing.set(false); this.showMsg('alertsMsg', 'alertsMsgOk', 'Error de red', false); }
     });
+  }
+
+  testContainerAlerts() {
+    this.testing.set(true);
+    this.api.post<any>('/api/containers/alerts/test').subscribe({
+      next: r => {
+        this.testing.set(false);
+        this.showMsg('containerAlertsMsg', 'containerAlertsMsgOk',
+          r.result + (r.detail ? ': ' + r.detail : ''), r.result === 'OK');
+      },
+      error: () => {
+        this.testing.set(false);
+        this.showMsg('containerAlertsMsg', 'containerAlertsMsgOk', 'Error de red', false);
+      }
+    });
+  }
+
+  // ── chip helpers ─────────────────────────────────────────────────────────
+
+  addExclude(event: MatChipInputEvent) {
+    const value = (event.value || '').trim();
+    if (value && !this.containerAlerts.excludedNames.includes(value)) {
+      this.containerAlerts.excludedNames.push(value);
+    }
+    event.chipInput!.clear();
+  }
+
+  removeExclude(name: string) {
+    const idx = this.containerAlerts.excludedNames.indexOf(name);
+    if (idx >= 0) this.containerAlerts.excludedNames.splice(idx, 1);
   }
 
   copyPrometheus() {

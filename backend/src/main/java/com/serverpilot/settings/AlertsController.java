@@ -11,11 +11,15 @@ import java.util.Map;
 public class AlertsController {
 
     private final SettingsService settingsService;
-    private final AuditService auditService;
+    private final AuditService    auditService;
+    private final WebhookService  webhookService;
 
-    public AlertsController(SettingsService settingsService, AuditService auditService) {
+    public AlertsController(SettingsService settingsService,
+                            AuditService auditService,
+                            WebhookService webhookService) {
         this.settingsService = settingsService;
         this.auditService    = auditService;
+        this.webhookService  = webhookService;
     }
 
     @GetMapping("/config")
@@ -39,20 +43,10 @@ public class AlertsController {
         if (a.url.isBlank()) {
             return ResponseEntity.ok(Map.of("result", "ERROR", "detail", "URL no configurada"));
         }
-        try {
-            java.net.URL u = new java.net.URL(a.url);
-            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) u.openConnection();
-            conn.setRequestMethod("POST");
-            conn.setDoOutput(true);
-            conn.setConnectTimeout(5000);
-            conn.setReadTimeout(5000);
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.getOutputStream().write("{\"text\":\"Server Pilot: test de notificación\"}".getBytes());
-            int code = conn.getResponseCode();
-            conn.disconnect();
-            return ResponseEntity.ok(Map.of("result", code < 400 ? "OK" : "ERROR", "detail", "HTTP " + code));
-        } catch (Exception e) {
-            return ResponseEntity.ok(Map.of("result", "ERROR", "detail", e.getMessage()));
-        }
+        boolean ok = webhookService.send("Server Pilot: test de notificación");
+        return ResponseEntity.ok(Map.of(
+            "result", ok ? "OK" : "ERROR",
+            "detail", ok ? "Notificación enviada" : "Error al enviar"
+        ));
     }
 }
