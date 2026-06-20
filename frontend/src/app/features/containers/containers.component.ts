@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, signal, computed } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, computed, ViewChild, ElementRef, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
@@ -16,7 +16,7 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
   standalone: true,
   imports: [CommonModule, MatIconModule, MatButtonModule, MatTooltipModule, FormsModule, ContainerConsoleComponent],
   styles: [`
-    .toolbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+    .toolbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:8px; }
     .filter-tabs { display:flex; gap:4px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:8px; padding:3px; }
     .filter-tab {
       padding: 5px 14px; border-radius:6px; border:none; cursor:pointer;
@@ -71,7 +71,7 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
 
     .logs-panel {
       background:var(--bg-primary); border-top:1px solid var(--border);
-      padding:12px 16px;
+      padding:12px 16px; position:relative;
     }
     .logs-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
     .logs-title { font-size:12px; color:var(--text-secondary); font-family:monospace; display:flex; align-items:center; gap:6px; }
@@ -80,14 +80,39 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
       font-size:11px; line-height:1.6; white-space:pre-wrap;
       color:#c9d1d9; background:var(--bg-primary);
     }
+    .scroll-to-bottom-btn {
+      position:absolute; bottom:10px; right:16px;
+      display:flex; align-items:center; gap:4px;
+      padding:5px 12px; border-radius:20px;
+      background:var(--accent); color:#fff; border:none; cursor:pointer;
+      font-size:12px; font-weight:600; z-index:2;
+      box-shadow:0 2px 8px rgba(0,0,0,.4);
+      transition:opacity .15s, transform .15s;
+    }
+    .scroll-to-bottom-btn:hover { opacity:.9; transform:translateY(-1px); }
 
     .empty { text-align:center; padding:48px; color:var(--text-muted); }
     .empty mat-icon { font-size:40px; width:40px; height:40px; display:block; margin:0 auto 12px; opacity:.3; }
+
+    @media (max-width: 959px) {
+      .col-header { display:none; }
+      .container-list { min-width:0 !important; }
+      .container-scroll { overflow-x:hidden; }
+      .container-row {
+        grid-template-columns:1fr;
+        gap:6px;
+        padding:12px 16px;
+      }
+      .cports { display:none; }
+      .actions { flex-wrap:wrap; gap:6px; }
+      .icon-btn { width:44px !important; height:44px !important; }
+      .icon-btn mat-icon { font-size:20px !important; width:20px !important; height:20px !important; }
+    }
   `],
   template: `
     <div class="toolbar">
       <h2 class="page-title" style="margin:0"><mat-icon>inventory_2</mat-icon> Contenedores</h2>
-      <div style="display:flex;gap:10px;align-items:center">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <div class="filter-tabs">
           <button class="filter-tab" [class.active]="filter==='all'"     (click)="filter='all'">Todos</button>
           <button class="filter-tab" [class.active]="filter==='running'" (click)="filter='running'">Running</button>
@@ -169,7 +194,10 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
                       </div>
                       <button class="icon-btn" (click)="closeLogs()"><mat-icon>close</mat-icon></button>
                     </div>
-                    <div class="logs-body">{{ logsText() }}</div>
+                    <div class="logs-body" #logsBody (scroll)="onLogsScroll($event)">{{ logsText() }}</div>
+                    @if (showLogsScrollBtn()) {
+                      <button class="scroll-to-bottom-btn" (click)="scrollLogsToBottom()">↓ Ir al final</button>
+                    }
                   </div>
                 }
               }
@@ -188,7 +216,10 @@ export class ContainersComponent implements OnInit, OnDestroy {
   expandedId = signal('');
   logsText = signal('');
   consoleContainer = signal<Container | null>(null);
+  showLogsScrollBtn = signal(false);
 
+  @ViewChild('logsBody') private logsBody?: ElementRef<HTMLDivElement>;
+  private logsAtBottom = true;
   private logsWs?: WebSocket;
   private interval?: ReturnType<typeof setInterval>;
 
@@ -211,7 +242,17 @@ export class ContainersComponent implements OnInit, OnDestroy {
       .map(([name, containers]) => ({ name, containers, open: true }));
   });
 
-  constructor(private api: ApiService, private rt: RealtimeService) {}
+  constructor(private api: ApiService, private rt: RealtimeService) {
+    effect(() => {
+      const _ = this.logsText();
+      if (this.logsAtBottom) {
+        setTimeout(() => {
+          const el = this.logsBody?.nativeElement;
+          if (el) el.scrollTop = el.scrollHeight;
+        }, 0);
+      }
+    });
+  }
 
   ngOnInit() { this.load(); this.interval = setInterval(() => this.load(), 10000); }
 
@@ -246,13 +287,34 @@ export class ContainersComponent implements OnInit, OnDestroy {
   async toggleLogs(c: Container) {
     if (this.expandedId() === c.id) { this.closeLogs(); return; }
     this.closeLogs();
+    this.logsAtBottom = true;
+    this.showLogsScrollBtn.set(false);
     this.expandedId.set(c.id);
     this.logsText.set('');
     this.logsWs = await this.rt.openSocket(`/ws/docker/logs/${c.id}`);
     this.logsWs.onmessage = ev => this.logsText.update(t => t + ev.data);
   }
 
-  closeLogs() { this.logsWs?.close(); this.expandedId.set(''); this.logsText.set(''); }
+  closeLogs() {
+    this.logsWs?.close();
+    this.expandedId.set('');
+    this.logsText.set('');
+    this.showLogsScrollBtn.set(false);
+  }
+
+  onLogsScroll(event: Event) {
+    const el = event.target as HTMLDivElement;
+    this.logsAtBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 40;
+    this.showLogsScrollBtn.set(!this.logsAtBottom);
+  }
+
+  scrollLogsToBottom() {
+    const el = this.logsBody?.nativeElement;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    this.logsAtBottom = true;
+    this.showLogsScrollBtn.set(false);
+  }
 
   openConsole(c: Container) { this.consoleContainer.set(c); }
   closeConsole() { this.consoleContainer.set(null); }

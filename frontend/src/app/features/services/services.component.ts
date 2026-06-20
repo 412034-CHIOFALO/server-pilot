@@ -68,6 +68,10 @@ interface ServiceStatus { id:string; name:string; host:string; port:number; stat
     .empty { text-align:center; padding:60px 24px; color:var(--text-muted); }
     .empty mat-icon { font-size:48px; width:48px; height:48px; display:block; margin:0 auto 12px; opacity:.25; }
     .empty p { font-size:14px; }
+    @media (max-width: 640px) {
+      .toolbar { flex-wrap:wrap; gap:10px; }
+      .btn-group { flex-wrap:wrap; }
+    }
   `],
   template: `
     <div class="toolbar">

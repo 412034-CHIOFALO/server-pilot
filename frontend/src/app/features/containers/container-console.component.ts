@@ -54,7 +54,17 @@ import { RealtimeService } from '../../core/realtime.service';
     }
     .icon-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
     .icon-btn mat-icon { font-size: 16px; width: 16px; height: 16px; }
-    .term-container { flex: 1; padding: 4px 2px; min-height: 0; background: #0d1117; }
+    .term-body { flex: 1; position: relative; min-height: 0; background: #0d1117; }
+    .term-container { width: 100%; height: 100%; padding: 4px 2px; }
+    .scroll-btn {
+      position: absolute; bottom: 16px; right: 16px; z-index: 10;
+      display: flex; align-items: center; gap: 4px;
+      padding: 5px 12px; border-radius: 20px;
+      background: var(--accent); color: #fff; border: none; cursor: pointer;
+      font-size: 12px; font-weight: 600; box-shadow: 0 2px 8px rgba(0,0,0,.4);
+      transition: opacity .15s, transform .15s;
+    }
+    .scroll-btn:hover { opacity: .9; transform: translateY(-1px); }
   `],
   template: `
     <div class="overlay" (click)="onOverlayClick($event)">
@@ -76,7 +86,12 @@ import { RealtimeService } from '../../core/realtime.service';
             <mat-icon>close</mat-icon>
           </button>
         </div>
-        <div #termContainer class="term-container"></div>
+        <div class="term-body">
+          <div #termContainer class="term-container"></div>
+          @if (showScrollBtn()) {
+            <button class="scroll-btn" (click)="scrollToBottom()">↓ Ir al final</button>
+          }
+        </div>
       </div>
     </div>
   `
@@ -90,11 +105,13 @@ export class ContainerConsoleComponent implements AfterViewInit, OnDestroy {
 
   statusMsg   = signal('Conectando...');
   statusClass = signal('connecting');
+  showScrollBtn = signal(false);
 
   private term?: Terminal;
   private fitAddon?: FitAddon;
   private ws?: WebSocket;
   private resizeObserver?: ResizeObserver;
+  private atBottom = true;
 
   constructor(private rt: RealtimeService) {}
 
@@ -116,10 +133,17 @@ export class ContainerConsoleComponent implements AfterViewInit, OnDestroy {
     this.fitAddon = new FitAddon();
     this.term.loadAddon(this.fitAddon);
     this.term.open(this.termContainer.nativeElement);
-    setTimeout(() => this.fitAddon?.fit(), 50);
+    setTimeout(() => { this.fitAddon?.fit(); this.term?.scrollToBottom(); }, 50);
 
     this.term.onData(data => {
       if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(data);
+    });
+
+    this.term.onScroll(() => {
+      if (!this.term) return;
+      const buf = this.term.buffer.active;
+      this.atBottom = buf.viewportY >= buf.length - this.term.rows;
+      this.showScrollBtn.set(!this.atBottom);
     });
 
     this.resizeObserver = new ResizeObserver(() => {
@@ -133,11 +157,17 @@ export class ContainerConsoleComponent implements AfterViewInit, OnDestroy {
     try {
       this.ws = await this.rt.openSocket(`/ws/docker/exec/${this.containerId}`);
       this.statusMsg.set('Conectado'); this.statusClass.set('connected');
+      this.atBottom = true;
+      this.term?.scrollToBottom();
       this.ws.onmessage = ev => {
         if (ev.data instanceof Blob) {
-          ev.data.arrayBuffer().then((buf: ArrayBuffer) => this.term?.write(new Uint8Array(buf)));
+          ev.data.arrayBuffer().then((buf: ArrayBuffer) => {
+            this.term?.write(new Uint8Array(buf));
+            if (this.atBottom) this.term?.scrollToBottom();
+          });
         } else {
           this.term?.write(ev.data);
+          if (this.atBottom) this.term?.scrollToBottom();
         }
       };
       this.ws.onclose = () => {
@@ -149,6 +179,12 @@ export class ContainerConsoleComponent implements AfterViewInit, OnDestroy {
       this.statusMsg.set('Error'); this.statusClass.set('disconnected');
       this.term?.writeln('\r\n\x1b[31m[No se pudo conectar al contenedor]\x1b[0m');
     }
+  }
+
+  scrollToBottom() {
+    this.term?.scrollToBottom();
+    this.atBottom = true;
+    this.showScrollBtn.set(false);
   }
 
   onOverlayClick(e: MouseEvent) {

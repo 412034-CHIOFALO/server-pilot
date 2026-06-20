@@ -27,7 +27,7 @@ interface Runbook { id?: string; name: string; description: string; command: str
     }
     .dialog-icon mat-icon { color:var(--accent); font-size:18px; width:18px; height:18px; }
     .dialog-title { font-size:16px; font-weight:600; color:var(--text-primary); }
-    .dialog-body { padding:20px 24px; display:flex; flex-direction:column; gap:12px; min-width:380px; }
+    .dialog-body { padding:20px 24px; display:flex; flex-direction:column; gap:12px; min-width:min(380px, calc(90vw - 48px)); }
     mat-form-field { width:100%; }
     .dialog-footer {
       display:flex; justify-content:flex-end; gap:8px;

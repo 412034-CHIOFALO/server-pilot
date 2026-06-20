@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, signal } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, ViewChild, ElementRef, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
@@ -61,7 +61,7 @@ interface UnitDTO { name: string; load: string; active: string; sub: string; des
 
     .log-panel {
       margin-top:20px; background:var(--bg-secondary); border:1px solid var(--border);
-      border-radius:var(--radius-md); overflow:hidden;
+      border-radius:var(--radius-md); overflow:hidden; position:relative;
     }
     .log-header {
       display:flex; align-items:center; justify-content:space-between;
@@ -77,6 +77,17 @@ interface UnitDTO { name: string; load: string; active: string; sub: string; des
     .empty { text-align:center; padding:60px; color:var(--text-muted); }
     .empty mat-icon { font-size:48px; width:48px; height:48px; display:block; margin:0 auto 12px; opacity:.25; }
     .loading { text-align:center; padding:40px; color:var(--text-muted); font-size:13px; }
+
+    .scroll-to-bottom-btn {
+      position:absolute; bottom:12px; right:14px;
+      display:flex; align-items:center; gap:4px;
+      padding:5px 12px; border-radius:20px;
+      background:var(--accent); color:#fff; border:none; cursor:pointer;
+      font-size:12px; font-weight:600; box-shadow:0 2px 8px rgba(0,0,0,.4);
+      transition:opacity .15s, transform .15s; z-index:2;
+    }
+    .scroll-to-bottom-btn:hover { opacity:.9; transform:translateY(-1px); }
+
     @media (max-width: 640px) {
       .col-load, .col-sub, .col-desc { display: none; }
       .search-input { min-width: 120px; }
@@ -143,7 +154,10 @@ interface UnitDTO { name: string; load: string; active: string; sub: string; des
           </div>
           <button class="icon-btn" (click)="closeJournal()"><mat-icon>close</mat-icon></button>
         </div>
-        <div class="log-body" #logBody>{{ journalLog() }}</div>
+        <div class="log-body" #logBody (scroll)="onJournalScroll($event)">{{ journalLog() }}</div>
+        @if (showJournalScrollBtn()) {
+          <button class="scroll-to-bottom-btn" (click)="scrollJournalToBottom()">↓ Ir al final</button>
+        }
       </div>
     }
   `
@@ -155,9 +169,23 @@ export class SystemdComponent implements OnInit, OnDestroy {
 
   journalUnit = signal('');
   journalLog  = signal('');
+  showJournalScrollBtn = signal(false);
+
+  @ViewChild('logBody') private logBody?: ElementRef<HTMLDivElement>;
+  private journalAtBottom = true;
   private journalWs?: WebSocket;
 
-  constructor(private api: ApiService, private rt: RealtimeService) {}
+  constructor(private api: ApiService, private rt: RealtimeService) {
+    effect(() => {
+      const _ = this.journalLog();
+      if (this.journalAtBottom) {
+        setTimeout(() => {
+          const el = this.logBody?.nativeElement;
+          if (el) el.scrollTop = el.scrollHeight;
+        }, 0);
+      }
+    });
+  }
 
   ngOnInit() { this.load(); }
 
@@ -193,6 +221,8 @@ export class SystemdComponent implements OnInit, OnDestroy {
 
   async openJournal(u: UnitDTO) {
     this.closeJournal();
+    this.journalAtBottom = true;
+    this.showJournalScrollBtn.set(false);
     this.journalUnit.set(u.name);
     this.journalLog.set('');
     this.journalWs = await this.rt.openSocket('/ws/journal/' + u.name);
@@ -206,6 +236,21 @@ export class SystemdComponent implements OnInit, OnDestroy {
     this.journalWs = undefined;
     this.journalUnit.set('');
     this.journalLog.set('');
+    this.showJournalScrollBtn.set(false);
+  }
+
+  onJournalScroll(event: Event) {
+    const el = event.target as HTMLDivElement;
+    this.journalAtBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 40;
+    this.showJournalScrollBtn.set(!this.journalAtBottom);
+  }
+
+  scrollJournalToBottom() {
+    const el = this.logBody?.nativeElement;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    this.journalAtBottom = true;
+    this.showJournalScrollBtn.set(false);
   }
 
   ngOnDestroy() { this.closeJournal(); }
