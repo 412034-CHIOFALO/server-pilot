@@ -55,6 +55,10 @@ export const routes: Routes = [
         path: 'systemd',
         loadComponent: () => import('./features/systemd/systemd.component').then(m => m.SystemdComponent)
       },
+      {
+        path: 'accesos',
+        loadComponent: () => import('./features/accesos/accesos.component').then(m => m.AccesosComponent)
+      },
     ]
   },
   { path: '**', redirectTo: '' }

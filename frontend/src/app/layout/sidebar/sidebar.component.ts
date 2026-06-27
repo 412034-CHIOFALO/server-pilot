@@ -96,6 +96,7 @@ export class SidebarComponent {
     { icon: 'memory',        label: 'Procesos',   path: '/procesos' },
   ];
   infraItems: NavItem[] = [
+    { icon: 'apps',               label: 'Accesos',     path: '/accesos' },
     { icon: 'inventory_2',        label: 'Containers',  path: '/containers' },
     { icon: 'folder',             label: 'Archivos',    path: '/archivos' },
     { icon: 'terminal',           label: 'Terminal',    path: '/terminal' },
