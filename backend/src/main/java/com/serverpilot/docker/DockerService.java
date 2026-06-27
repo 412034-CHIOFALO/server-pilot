@@ -89,6 +89,32 @@ public class DockerService {
         docker.removeContainerCmd(id).withForce(false).exec();
     }
 
+    public record ComposeInfo(String configFiles, String workingDir) {}
+
+    public ComposeInfo getComposeInfo(String project) {
+        List<Container> containers = docker.listContainersCmd().withShowAll(true).exec();
+        for (Container c : containers) {
+            if (c.getLabels() == null) continue;
+            if (!project.equals(c.getLabels().get("com.docker.compose.project"))) continue;
+            String configFiles = c.getLabels().get("com.docker.compose.project.config_files");
+            String workingDir  = c.getLabels().get("com.docker.compose.project.working_dir");
+            if (configFiles != null && !configFiles.isBlank() && workingDir != null && !workingDir.isBlank()) {
+                return new ComposeInfo(configFiles, workingDir);
+            }
+        }
+        return null;
+    }
+
+    public List<String> getContainerIdsByProject(String project) {
+        return docker.listContainersCmd().withShowAll(true).exec().stream()
+            .filter(c -> {
+                String proj = c.getLabels() != null ? c.getLabels().get("com.docker.compose.project") : null;
+                return "standalone".equals(project) ? (proj == null || proj.isBlank()) : project.equals(proj);
+            })
+            .map(Container::getId)
+            .toList();
+    }
+
     public Map<String, Object> getInfo() {
         Info info = docker.infoCmd().exec();
         return Map.of(

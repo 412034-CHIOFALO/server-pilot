@@ -1,22 +1,29 @@
 package com.serverpilot.docker;
 
 import com.serverpilot.audit.AuditService;
+import com.serverpilot.ssh.ExecResult;
+import com.serverpilot.ssh.SshService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/docker")
 public class DockerController {
 
-    private final DockerService dockerService;
-    private final AuditService auditService;
+    private static final Set<String> COMPOSE_ACTIONS = Set.of("up", "stop", "restart", "down");
 
-    public DockerController(DockerService dockerService, AuditService auditService) {
+    private final DockerService dockerService;
+    private final AuditService  auditService;
+    private final SshService    sshService;
+
+    public DockerController(DockerService dockerService, AuditService auditService, SshService sshService) {
         this.dockerService = dockerService;
         this.auditService  = auditService;
+        this.sshService    = sshService;
     }
 
     @GetMapping("/containers")
@@ -75,6 +82,75 @@ public class DockerController {
             auditService.log("DOCKER_REMOVE", id, "ERROR", e.getMessage());
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
+    }
+
+    @PostMapping("/projects/{project}/compose")
+    public ResponseEntity<Map<String, Object>> composeAction(
+            @PathVariable String project,
+            @RequestBody Map<String, String> body) {
+
+        String action = body.get("action");
+        if (!COMPOSE_ACTIONS.contains(action)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Acción inválida: " + action));
+        }
+
+        try {
+            DockerService.ComposeInfo info = dockerService.getComposeInfo(project);
+
+            if (info != null) {
+                String cmd = buildComposeCommand(info, action);
+                ExecResult r = sshService.execCommand(cmd, 120_000);
+                String output = r.stdout() + (r.stderr().isBlank() ? "" : "\n[stderr]\n" + r.stderr());
+                String status = r.exitCode() == 0 ? "OK" : "ERROR";
+                auditService.log("COMPOSE_" + action.toUpperCase(), project, status,
+                    "cmd=" + cmd + " exit=" + r.exitCode());
+                return ResponseEntity.ok(Map.of("output", output, "exitCode", r.exitCode()));
+            }
+
+            // Fallback: per-container via docker-java
+            List<String> ids = dockerService.getContainerIdsByProject(project);
+            StringBuilder out = new StringBuilder("(Sin labels compose — operación por contenedor)\n");
+            int errors = 0;
+            for (String id : ids) {
+                String shortId = id.length() >= 12 ? id.substring(0, 12) : id;
+                try {
+                    switch (action) {
+                        case "up"      -> dockerService.startContainer(id);
+                        case "stop"    -> dockerService.stopContainer(id);
+                        case "restart" -> dockerService.restartContainer(id);
+                        case "down"    -> dockerService.stopContainer(id);
+                    }
+                    out.append(shortId).append(": OK\n");
+                } catch (Exception ex) {
+                    out.append(shortId).append(": ").append(ex.getMessage()).append("\n");
+                    errors++;
+                }
+            }
+            String status = errors == 0 ? "OK" : "PARTIAL";
+            auditService.log("COMPOSE_" + action.toUpperCase(), project, status, "fallback containers=" + ids.size());
+            return ResponseEntity.ok(Map.of("output", out.toString(), "exitCode", errors == 0 ? 0 : 1));
+
+        } catch (Exception e) {
+            auditService.log("COMPOSE_" + action.toUpperCase(), project, "ERROR", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    private String buildComposeCommand(DockerService.ComposeInfo info, String action) {
+        StringBuilder cmd = new StringBuilder("docker compose");
+        for (String f : info.configFiles().split(",")) {
+            String t = f.trim();
+            if (!t.isEmpty()) cmd.append(" -f ").append(t);
+        }
+        cmd.append(" --project-directory ").append(info.workingDir());
+        String base = cmd.toString();
+        return switch (action) {
+            case "up"      -> base + " up -d";
+            case "stop"    -> base + " stop";
+            case "restart" -> base + " restart";
+            case "down"    -> base + " down";
+            default        -> throw new IllegalArgumentException("Unknown action: " + action);
+        };
     }
 
     @GetMapping("/info")

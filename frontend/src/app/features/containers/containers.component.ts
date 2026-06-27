@@ -38,6 +38,40 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
     .chevron { transition:transform .2s; color:var(--text-muted); font-size:18px; width:18px; height:18px; }
     .chevron.open { transform:rotate(90deg); }
 
+    .compose-btns { display:flex; gap:3px; margin-left:auto; }
+    .compose-btn {
+      width:28px; height:28px; border-radius:6px; border:1px solid var(--border);
+      display:flex; align-items:center; justify-content:center;
+      cursor:pointer; background:var(--bg-tertiary); color:var(--text-secondary);
+      transition:all .15s; flex-shrink:0;
+    }
+    .compose-btn:hover:not(:disabled) { background:var(--bg-hover); color:var(--text-primary); border-color:var(--accent); }
+    .compose-btn.danger:hover:not(:disabled) { background:rgba(248,81,73,.12); color:var(--red); border-color:var(--red); }
+    .compose-btn:disabled { opacity:.35; cursor:not-allowed; }
+    .compose-btn mat-icon { font-size:15px; width:15px; height:15px; }
+
+    .compose-output {
+      display:flex; flex-wrap:wrap; align-items:flex-start; gap:4px;
+      padding:8px 16px; background:rgba(88,166,255,.05);
+      border-top:1px solid var(--border-subtle);
+    }
+    .compose-output.error-out { background:rgba(248,81,73,.05); }
+    .co-hdr { display:flex; align-items:center; justify-content:space-between; width:100%; }
+    .co-status { display:flex; align-items:center; gap:4px; font-size:12px; font-weight:600; }
+    .co-status mat-icon { font-size:14px; width:14px; height:14px; }
+    .compose-pre {
+      margin:4px 0 0; font-size:10.5px; color:var(--text-secondary);
+      white-space:pre-wrap; word-break:break-all;
+      max-height:160px; overflow-y:auto;
+      background:var(--bg-primary); border-radius:4px;
+      padding:8px; border:1px solid var(--border-subtle);
+      width:100%; font-family:'JetBrains Mono',monospace;
+    }
+    .spin-compose {
+      font-size:16px; width:16px; height:16px; color:var(--accent);
+      animation:spin .8s linear infinite;
+    }
+
     .container-scroll { overflow-x:auto; }
     .container-list { background:var(--bg-primary); min-width:520px; }
     .container-row {
@@ -143,8 +177,48 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
             <mat-icon style="color:var(--accent);font-size:18px;width:18px;height:18px">folder_open</mat-icon>
             <span class="project-name">{{ group.name }}</span>
             <span class="project-count">{{ group.containers.length }}</span>
+            <div class="compose-btns" (click)="$event.stopPropagation()">
+              <button class="compose-btn" [disabled]="isComposeRunning(group.name)"
+                      matTooltip="Levantar todo (up -d)" (click)="composeAction(group.name, 'up')">
+                <mat-icon>play_arrow</mat-icon>
+              </button>
+              <button class="compose-btn" [disabled]="isComposeRunning(group.name)"
+                      matTooltip="Detener todo (stop)" (click)="composeAction(group.name, 'stop')">
+                <mat-icon>stop</mat-icon>
+              </button>
+              <button class="compose-btn" [disabled]="isComposeRunning(group.name)"
+                      matTooltip="Reiniciar todo (restart)" (click)="composeAction(group.name, 'restart')">
+                <mat-icon>restart_alt</mat-icon>
+              </button>
+              <button class="compose-btn danger" [disabled]="isComposeRunning(group.name)"
+                      matTooltip="Bajar stack (down)" (click)="composeDown(group.name)">
+                <mat-icon>layers_clear</mat-icon>
+              </button>
+            </div>
             <mat-icon class="chevron" [class.open]="group.open">chevron_right</mat-icon>
           </div>
+
+          @if (composeState(group.name); as cs) {
+            <div class="compose-output" [class.error-out]="cs.error">
+              @if (cs.running) {
+                <mat-icon class="spin-compose">refresh</mat-icon>
+                <span style="font-size:12px;color:var(--text-secondary)">Ejecutando acción en el stack...</span>
+              } @else {
+                <div class="co-hdr">
+                  <div class="co-status" [style.color]="cs.error ? 'var(--red)' : 'var(--green)'">
+                    <mat-icon>{{ cs.error ? 'error_outline' : 'check_circle_outline' }}</mat-icon>
+                    {{ cs.error ? 'Error' : 'Completado' }}
+                  </div>
+                  <button class="icon-btn" style="width:24px;height:24px" (click)="clearComposeState(group.name)">
+                    <mat-icon style="font-size:14px;width:14px;height:14px">close</mat-icon>
+                  </button>
+                </div>
+                @if (cs.output) {
+                  <pre class="compose-pre">{{ cs.output }}</pre>
+                }
+              }
+            </div>
+          }
 
           @if (group.open) {
             <div class="container-scroll">
@@ -222,6 +296,8 @@ export class ContainersComponent implements OnInit, OnDestroy {
   private logsAtBottom = true;
   private logsWs?: WebSocket;
   private interval?: ReturnType<typeof setInterval>;
+
+  composeStates = signal<Record<string, {running:boolean; output:string; error:boolean}>>({});
 
   filtered = computed(() => {
     const list = this.containers();
@@ -318,6 +394,46 @@ export class ContainersComponent implements OnInit, OnDestroy {
 
   openConsole(c: Container) { this.consoleContainer.set(c); }
   closeConsole() { this.consoleContainer.set(null); }
+
+  // ── Compose stack actions ──────────────────────────────────────────────────
+
+  composeState(project: string) {
+    const s = this.composeStates()[project];
+    return (!s || (!s.running && !s.output)) ? null : s;
+  }
+
+  isComposeRunning(project: string) {
+    return this.composeStates()[project]?.running ?? false;
+  }
+
+  composeAction(project: string, action: 'up'|'stop'|'restart'|'down') {
+    this.composeStates.update(s => ({ ...s, [project]: { running: true, output: '', error: false } }));
+    this.api.post<{output: string; exitCode: number}>(
+      `/api/docker/projects/${encodeURIComponent(project)}/compose`, { action }
+    ).subscribe({
+      next: r => {
+        this.composeStates.update(s => ({
+          ...s, [project]: { running: false, output: r.output || 'Completado', error: r.exitCode !== 0 }
+        }));
+        setTimeout(() => this.load(), 2000);
+      },
+      error: err => {
+        this.composeStates.update(s => ({
+          ...s, [project]: { running: false, output: err.error?.error || 'Error desconocido', error: true }
+        }));
+      }
+    });
+  }
+
+  composeDown(project: string) {
+    if (confirm(`¿Bajar el stack "${project}"?\nSe detendrán y eliminarán los contenedores del proyecto.`)) {
+      this.composeAction(project, 'down');
+    }
+  }
+
+  clearComposeState(project: string) {
+    this.composeStates.update(s => { const n = { ...s }; delete n[project]; return n; });
+  }
 
   ngOnDestroy() { clearInterval(this.interval); this.logsWs?.close(); }
 }

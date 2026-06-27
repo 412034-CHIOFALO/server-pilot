@@ -67,6 +67,10 @@ public class SshService {
     }
 
     public ExecResult execCommand(String cmd) throws Exception {
+        return execCommand(cmd, 30_000);
+    }
+
+    public ExecResult execCommand(String cmd, long timeoutMs) throws Exception {
         Session session = openSession();
         try {
             ChannelExec channel = (ChannelExec) session.openChannel("exec");
@@ -79,7 +83,7 @@ public class SshService {
 
             channel.connect(5000);
 
-            long deadline = System.currentTimeMillis() + 30_000;
+            long deadline = System.currentTimeMillis() + timeoutMs;
             while (!channel.isClosed() && System.currentTimeMillis() < deadline) {
                 try { Thread.sleep(100); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
             }
