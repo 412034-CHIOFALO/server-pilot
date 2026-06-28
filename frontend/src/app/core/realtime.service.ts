@@ -17,6 +17,10 @@ export class RealtimeService {
       this.http.post<{ ticket: string }>(`${apiBase}/api/auth/ticket`, {})
     );
     const url = `${wsBase}${path}?ticket=${ticketResp.ticket}`;
-    return new WebSocket(url);
+    return new Promise<WebSocket>((resolve, reject) => {
+      const ws = new WebSocket(url);
+      ws.onopen = () => resolve(ws);
+      ws.onerror = () => reject(new Error('WebSocket connection failed'));
+    });
   }
 }

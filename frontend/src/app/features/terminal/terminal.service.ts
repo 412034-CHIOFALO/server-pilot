@@ -43,24 +43,27 @@ export class TerminalService {
     terminal.loadAddon(fitAddon);
 
     const tab: TerminalTab = { id, title: `Terminal ${n}`, terminal, fitAddon, status: 'connecting' };
+
+    // Register onData BEFORE awaiting the WS — uses tab.ws reference filled in after connect.
+    // This avoids any window where the terminal is open but the listener isn't registered yet.
+    terminal.onData(data => {
+      if (tab.ws?.readyState === WebSocket.OPEN) tab.ws.send(data);
+    });
+
     this._tabs.update(tabs => [...tabs, tab]);
     this._activeId.set(id);
 
     try {
-      const ws = await this.rt.openSocket('/ws/terminal');
+      const ws = await this.rt.openSocket('/ws/terminal'); // resolves only after onopen
       tab.ws = ws;
       tab.status = 'connected';
       this._tabs.update(t => [...t]);
-
-      terminal.onData(data => {
-        if (ws.readyState === WebSocket.OPEN) ws.send(data);
-      });
 
       ws.onmessage = ev => {
         if (ev.data instanceof Blob) {
           ev.data.arrayBuffer().then(buf => terminal.write(new Uint8Array(buf)));
         } else {
-          terminal.write(ev.data);
+          terminal.write(ev.data as string);
         }
       };
 

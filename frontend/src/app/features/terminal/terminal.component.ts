@@ -219,7 +219,10 @@ export class TerminalComponent implements AfterViewInit, OnDestroy {
     const id = this.svc.activeId();
     if (id) {
       const t = this.svc.getTab(id);
-      setTimeout(() => t?.fitAddon.fit(), 50);
+      setTimeout(() => {
+        t?.fitAddon.fit();
+        t?.terminal.focus();
+      }, 100);
     }
   }
 
@@ -233,7 +236,11 @@ export class TerminalComponent implements AfterViewInit, OnDestroy {
 
   switchTab(id: string) {
     this.svc.setActive(id);
-    setTimeout(() => this.svc.getTab(id)?.fitAddon.fit(), 50);
+    setTimeout(() => {
+      const t = this.svc.getTab(id);
+      t?.fitAddon.fit();
+      t?.terminal.focus();
+    }, 50);
   }
 
   newTab() {
