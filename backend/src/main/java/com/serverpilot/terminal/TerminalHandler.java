@@ -11,7 +11,7 @@ import org.springframework.web.socket.handler.AbstractWebSocketHandler;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class TerminalHandler extends AbstractWebSocketHandler {
@@ -19,7 +19,7 @@ public class TerminalHandler extends AbstractWebSocketHandler {
     private static final Logger log = LoggerFactory.getLogger(TerminalHandler.class);
 
     private final SshService sshService;
-    private final AtomicReference<TerminalSession> activeSession = new AtomicReference<>();
+    private final ConcurrentHashMap<String, TerminalSession> sessions = new ConcurrentHashMap<>();
 
     public TerminalHandler(SshService sshService) {
         this.sshService = sshService;
@@ -27,12 +27,6 @@ public class TerminalHandler extends AbstractWebSocketHandler {
 
     @Override
     public void afterConnectionEstablished(WebSocketSession wsSession) throws Exception {
-        if (activeSession.get() != null) {
-            wsSession.sendMessage(new TextMessage("ERROR: Terminal ocupada"));
-            wsSession.close();
-            return;
-        }
-
         try {
             JSch jsch = new JSch();
             Path kp = Path.of(sshService.getKeyPath());
@@ -54,13 +48,7 @@ public class TerminalHandler extends AbstractWebSocketHandler {
             channel.connect();
 
             TerminalSession ts = new TerminalSession(wsSession, sshSession, channel, pipedOut);
-            if (!activeSession.compareAndSet(null, ts)) {
-                channel.disconnect();
-                sshSession.disconnect();
-                wsSession.sendMessage(new TextMessage("ERROR: Terminal ocupada"));
-                wsSession.close();
-                return;
-            }
+            sessions.put(wsSession.getId(), ts);
 
             Thread readerThread = new Thread(() -> {
                 byte[] buf = new byte[4096];
@@ -72,14 +60,14 @@ public class TerminalHandler extends AbstractWebSocketHandler {
                 } catch (IOException e) {
                     // connection closed
                 } finally {
-                    closeTerminalSession(ts);
+                    closeSession(wsSession.getId());
                 }
-            }, "terminal-reader");
+            }, "terminal-reader-" + wsSession.getId());
             readerThread.setDaemon(true);
             readerThread.start();
 
         } catch (Exception e) {
-            log.error("SSH connection failed", e);
+            log.error("SSH connection failed for session {}", wsSession.getId(), e);
             wsSession.sendMessage(new TextMessage("ERROR: " + e.getMessage()));
             wsSession.close();
         }
@@ -87,8 +75,8 @@ public class TerminalHandler extends AbstractWebSocketHandler {
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
-        TerminalSession ts = activeSession.get();
-        if (ts == null || ts.wsSession() != session) return;
+        TerminalSession ts = sessions.get(session.getId());
+        if (ts == null) return;
         try {
             ts.stdin().write(message.getPayload().getBytes());
             ts.stdin().flush();
@@ -99,8 +87,8 @@ public class TerminalHandler extends AbstractWebSocketHandler {
 
     @Override
     protected void handleBinaryMessage(WebSocketSession session, BinaryMessage message) {
-        TerminalSession ts = activeSession.get();
-        if (ts == null || ts.wsSession() != session) return;
+        TerminalSession ts = sessions.get(session.getId());
+        if (ts == null) return;
         try {
             ts.stdin().write(message.getPayload().array());
             ts.stdin().flush();
@@ -111,15 +99,16 @@ public class TerminalHandler extends AbstractWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
-        TerminalSession ts = activeSession.get();
-        if (ts != null && ts.wsSession() == session) closeTerminalSession(ts);
+        closeSession(session.getId());
     }
 
-    private void closeTerminalSession(TerminalSession ts) {
-        if (!activeSession.compareAndSet(ts, null)) return;
-        try { ts.stdin().close(); }    catch (Exception ignored) {}
-        try { ts.channel().disconnect(); } catch (Exception ignored) {}
+    private void closeSession(String id) {
+        TerminalSession ts = sessions.remove(id);
+        if (ts == null) return;
+        try { ts.stdin().close(); }           catch (Exception ignored) {}
+        try { ts.channel().disconnect(); }    catch (Exception ignored) {}
         try { ts.sshSession().disconnect(); } catch (Exception ignored) {}
+        log.debug("Terminal session {} closed", id);
     }
 
     private record TerminalSession(
