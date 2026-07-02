@@ -1,6 +1,7 @@
 package com.serverpilot.docker;
 
 import com.github.dockerjava.api.DockerClient;
+import com.github.dockerjava.api.exception.NotModifiedException;
 import com.github.dockerjava.api.model.Container;
 import com.github.dockerjava.api.model.ContainerPort;
 import com.github.dockerjava.api.model.Info;
@@ -74,11 +75,13 @@ public class DockerService {
     }
 
     public void startContainer(String id) {
-        docker.startContainerCmd(id).exec();
+        try { docker.startContainerCmd(id).exec(); }
+        catch (NotModifiedException ignored) {} // 304 = already running → success
     }
 
     public void stopContainer(String id) {
-        docker.stopContainerCmd(id).exec();
+        try { docker.stopContainerCmd(id).exec(); }
+        catch (NotModifiedException ignored) {} // 304 = already stopped → success
     }
 
     public void restartContainer(String id) {

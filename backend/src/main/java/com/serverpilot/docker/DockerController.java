@@ -109,7 +109,10 @@ public class DockerController {
 
             // Fallback: per-container via docker-java
             List<String> ids = dockerService.getContainerIdsByProject(project);
-            StringBuilder out = new StringBuilder("(Sin labels compose — operación por contenedor)\n");
+            String header = "down".equals(action)
+                ? "(Sin labels compose — stop + remove por contenedor)\n"
+                : "(Sin labels compose — operación por contenedor)\n";
+            StringBuilder out = new StringBuilder(header);
             int errors = 0;
             for (String id : ids) {
                 String shortId = id.length() >= 12 ? id.substring(0, 12) : id;
@@ -118,7 +121,7 @@ public class DockerController {
                         case "up"      -> dockerService.startContainer(id);
                         case "stop"    -> dockerService.stopContainer(id);
                         case "restart" -> dockerService.restartContainer(id);
-                        case "down"    -> dockerService.stopContainer(id);
+                        case "down"    -> { dockerService.stopContainer(id); dockerService.removeContainer(id); }
                     }
                     out.append(shortId).append(": OK\n");
                 } catch (Exception ex) {

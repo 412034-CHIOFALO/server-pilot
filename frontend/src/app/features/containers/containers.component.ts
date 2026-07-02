@@ -4,9 +4,11 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { FormsModule } from '@angular/forms';
+import { MatDialog } from '@angular/material/dialog';
 import { ApiService } from '../../core/api.service';
 import { RealtimeService } from '../../core/realtime.service';
 import { ContainerConsoleComponent } from './container-console.component';
+import { ConfirmDialogComponent, ConfirmDialogData } from '../../shared/confirm-dialog.component';
 
 interface Container { id:string; shortId:string; name:string; image:string; status:string; state:string; ports:string[]; project:string; }
 interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
@@ -318,7 +320,7 @@ export class ContainersComponent implements OnInit, OnDestroy {
       .map(([name, containers]) => ({ name, containers, open: true }));
   });
 
-  constructor(private api: ApiService, private rt: RealtimeService) {
+  constructor(private api: ApiService, private rt: RealtimeService, private dialog: MatDialog) {
     effect(() => {
       const _ = this.logsText();
       if (this.logsAtBottom) {
@@ -347,12 +349,20 @@ export class ContainersComponent implements OnInit, OnDestroy {
   }
 
   confirmRemove(c: Container) {
-    if (confirm(`¿Eliminar "${c.name}"?`)) {
+    this.dialog.open<ConfirmDialogComponent, ConfirmDialogData, boolean>(ConfirmDialogComponent, {
+      data: {
+        title: `Eliminar "${c.name}"`,
+        message: 'El contenedor será eliminado. Esta acción no se puede deshacer.',
+        confirmLabel: 'Eliminar',
+        confirmDanger: true
+      }
+    }).afterClosed().subscribe(ok => {
+      if (!ok) return;
       this.api.delete(`/api/docker/containers/${c.id}`).subscribe({
         next: () => { this.load(); if (this.expandedId() === c.id) this.closeLogs(); },
         error: err => alert(err.error?.error || 'Error')
       });
-    }
+    });
   }
 
   groupHasExpanded(group: ProjectGroup): boolean {
@@ -426,9 +436,15 @@ export class ContainersComponent implements OnInit, OnDestroy {
   }
 
   composeDown(project: string) {
-    if (confirm(`¿Bajar el stack "${project}"?\nSe detendrán y eliminarán los contenedores del proyecto.`)) {
-      this.composeAction(project, 'down');
-    }
+    this.dialog.open<ConfirmDialogComponent, ConfirmDialogData, boolean>(ConfirmDialogComponent, {
+      data: {
+        title: `Bajar stack "${project}"`,
+        message: 'Se detendrán y eliminarán todos los contenedores del stack.',
+        warning: 'Los volúmenes con datos quedan intactos. Podés volver a levantarlo con "Levantar".',
+        confirmLabel: 'Bajar',
+        confirmDanger: true
+      }
+    }).afterClosed().subscribe(ok => { if (ok) this.composeAction(project, 'down'); });
   }
 
   clearComposeState(project: string) {
