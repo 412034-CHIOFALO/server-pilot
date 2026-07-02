@@ -125,4 +125,14 @@ export class TerminalService {
   getTab(id: string): TerminalTab | undefined {
     return this._tabs().find(t => t.id === id);
   }
+
+  resize(id: string, cols: number, rows: number): void {
+    const tab = this.getTab(id);
+    if (!tab?.ws || tab.ws.readyState !== WebSocket.OPEN) return;
+    const encoded = new TextEncoder().encode(JSON.stringify({ cols, rows }));
+    const buf = new Uint8Array(1 + encoded.length);
+    buf[0] = 0x01; // control marker — distinguishes from keyboard input (always text)
+    buf.set(encoded, 1);
+    tab.ws.send(buf);
+  }
 }

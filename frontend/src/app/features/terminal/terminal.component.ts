@@ -219,18 +219,25 @@ export class TerminalComponent implements AfterViewInit, OnDestroy {
 
     const id = this.svc.activeId();
     if (id) {
-      const t = this.svc.getTab(id);
       setTimeout(() => {
-        t?.fitAddon.fit();
-        t?.terminal.focus();
+        this.fitAndSync(id);
+        this.svc.getTab(id)?.terminal.focus();
       }, 100);
     }
+  }
+
+  /** Fit xterm to pane then sync PTY size to backend. */
+  private fitAndSync(id: string): void {
+    const t = this.svc.getTab(id);
+    if (!t) return;
+    t.fitAddon.fit();
+    this.svc.resize(id, t.terminal.cols, t.terminal.rows);
   }
 
   private setupResize() {
     this.resizeObs = new ResizeObserver(() => {
       const id = this.svc.activeId();
-      if (id) setTimeout(() => this.svc.getTab(id)?.fitAddon.fit(), 50);
+      if (id) setTimeout(() => this.fitAndSync(id), 50);
     });
     this.resizeObs.observe(this.termWrapper.nativeElement);
   }
@@ -238,9 +245,8 @@ export class TerminalComponent implements AfterViewInit, OnDestroy {
   switchTab(id: string) {
     this.svc.setActive(id);
     setTimeout(() => {
-      const t = this.svc.getTab(id);
-      t?.fitAddon.fit();
-      t?.terminal.focus();
+      this.fitAndSync(id);
+      this.svc.getTab(id)?.terminal.focus();
     }, 50);
   }
 

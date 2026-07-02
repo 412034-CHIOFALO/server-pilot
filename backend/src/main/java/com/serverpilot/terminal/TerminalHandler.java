@@ -9,6 +9,8 @@ import org.springframework.web.socket.*;
 import org.springframework.web.socket.handler.AbstractWebSocketHandler;
 
 import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.ConcurrentHashMap;
@@ -89,12 +91,49 @@ public class TerminalHandler extends AbstractWebSocketHandler {
     protected void handleBinaryMessage(WebSocketSession session, BinaryMessage message) {
         TerminalSession ts = sessions.get(session.getId());
         if (ts == null) return;
+
+        ByteBuffer payload = message.getPayload();
+        // Control message: first byte 0x01 signals a PTY resize, not stdin input
+        if (payload.hasRemaining() && payload.get(payload.position()) == 0x01) {
+            payload.position(payload.position() + 1);
+            byte[] jsonBytes = new byte[payload.remaining()];
+            payload.get(jsonBytes);
+            applyResize(ts, jsonBytes);
+            return;
+        }
+
         try {
-            ts.stdin().write(message.getPayload().array());
+            byte[] arr = new byte[payload.remaining()];
+            payload.get(arr);
+            ts.stdin().write(arr);
             ts.stdin().flush();
         } catch (IOException e) {
             log.error("Write to SSH stdin failed", e);
         }
+    }
+
+    private void applyResize(TerminalSession ts, byte[] jsonBytes) {
+        try {
+            String json = new String(jsonBytes, StandardCharsets.UTF_8);
+            int cols = jsonInt(json, "cols");
+            int rows = jsonInt(json, "rows");
+            if (cols > 0 && rows > 0) {
+                ((ChannelShell) ts.channel()).setPtySize(cols, rows, 0, 0);
+                log.debug("PTY resized to {}x{}", cols, rows);
+            }
+        } catch (Exception e) {
+            log.warn("Resize parse error: {}", e.getMessage());
+        }
+    }
+
+    private static int jsonInt(String json, String key) {
+        String marker = "\"" + key + "\":";
+        int i = json.indexOf(marker);
+        if (i < 0) return -1;
+        i += marker.length();
+        int j = i;
+        while (j < json.length() && Character.isDigit(json.charAt(j))) j++;
+        return j > i ? Integer.parseInt(json.substring(i, j)) : -1;
     }
 
     @Override
