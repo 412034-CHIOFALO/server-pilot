@@ -8,6 +8,8 @@ export interface TerminalTab {
   title: string;
   terminal: Terminal;
   fitAddon: FitAddon;
+  /** The div passed to terminal.open() — owned by the service, moved into panes by the component */
+  hostElement?: HTMLDivElement;
   ws?: WebSocket;
   status: 'connecting' | 'connected' | 'disconnected' | 'error';
 }
@@ -44,8 +46,31 @@ export class TerminalService {
 
     const tab: TerminalTab = { id, title: `Terminal ${n}`, terminal, fitAddon, status: 'connecting' };
 
-    // Register onData BEFORE awaiting the WS — uses tab.ws reference filled in after connect.
-    // This avoids any window where the terminal is open but the listener isn't registered yet.
+    // Ctrl+C: copy selection to clipboard (don't send SIGINT), or pass SIGINT if no selection.
+    // Ctrl+V: read clipboard and send to shell. Both handle Shift variants (key is uppercase).
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (event.type !== 'keydown') return true;
+      const ctrl = event.ctrlKey;
+      const key = event.key.toLowerCase();
+
+      if (ctrl && key === 'c') {
+        if (terminal.hasSelection()) {
+          navigator.clipboard.writeText(terminal.getSelection()).catch(() => {});
+          return false;
+        }
+        return true; // no selection → pass SIGINT to shell
+      }
+
+      if (ctrl && key === 'v') {
+        navigator.clipboard.readText()
+          .then(text => { if (tab.ws?.readyState === WebSocket.OPEN) tab.ws.send(text); })
+          .catch(() => {});
+        return false;
+      }
+
+      return true;
+    });
+
     terminal.onData(data => {
       if (tab.ws?.readyState === WebSocket.OPEN) tab.ws.send(data);
     });

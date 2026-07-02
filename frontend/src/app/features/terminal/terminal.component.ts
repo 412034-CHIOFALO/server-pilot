@@ -202,17 +202,18 @@ export class TerminalComponent implements AfterViewInit, OnDestroy {
       const paneEl = paneEls[i]?.nativeElement;
       if (!paneEl) return;
 
-      if (tab.terminal.element) {
-        // Re-parent the existing xterm element into the new pane
-        if (!paneEl.contains(tab.terminal.element)) {
-          paneEl.appendChild(tab.terminal.element);
+      if (tab.hostElement) {
+        // Move the live DOM subtree (hostEl + xterm internals) — buffer, WS and _parent stay intact
+        if (!paneEl.contains(tab.hostElement)) {
+          paneEl.appendChild(tab.hostElement);
         }
       } else {
-        // First open: create inner container and attach xterm
-        const inner = document.createElement('div');
-        inner.style.cssText = 'height:100%;width:100%;';
-        paneEl.appendChild(inner);
-        tab.terminal.open(inner);
+        // First mount: create host div in real DOM so xterm renderer initializes correctly
+        const hostEl = document.createElement('div');
+        hostEl.style.cssText = 'height:100%;width:100%;';
+        paneEl.appendChild(hostEl);
+        tab.terminal.open(hostEl);
+        tab.hostElement = hostEl;
       }
     });
 
