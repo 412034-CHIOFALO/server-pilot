@@ -16,15 +16,15 @@ import { TerminalService } from './terminal.service';
       border-radius:20px; font-size:12px; font-weight:500;
       border:1px solid; transition:all .3s;
     }
-    .status-pill.connected { background:rgba(63,185,80,.08); color:var(--green); border-color:rgba(63,185,80,.25); }
-    .status-pill.disconnected { background:rgba(248,81,73,.08); color:var(--red); border-color:rgba(248,81,73,.25); }
-    .status-pill.connecting { background:rgba(210,153,34,.08); color:var(--yellow); border-color:rgba(210,153,34,.25); }
-    .status-pill.error { background:rgba(248,81,73,.08); color:var(--red); border-color:rgba(248,81,73,.25); }
+    .status-pill.connected    { background:rgba(63,185,80,.08);  color:var(--green);  border-color:rgba(63,185,80,.25); }
+    .status-pill.disconnected { background:rgba(248,81,73,.08);  color:var(--red);    border-color:rgba(248,81,73,.25); }
+    .status-pill.connecting   { background:rgba(210,153,34,.08); color:var(--yellow); border-color:rgba(210,153,34,.25); }
+    .status-pill.error        { background:rgba(248,81,73,.08);  color:var(--red);    border-color:rgba(248,81,73,.25); }
     .status-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
     .status-pill.connected .status-dot { background:var(--green); animation:pulse 2s infinite; }
     .status-pill.disconnected .status-dot,
     .status-pill.error .status-dot { background:var(--red); }
-    .status-pill.connecting .status-dot { background:var(--yellow); }
+    .status-pill.connecting .status-dot { background:var(--yellow); animation:pulse 1s infinite; }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
     .toolbar-actions { display:flex; align-items:center; gap:8px; }
@@ -35,6 +35,8 @@ import { TerminalService } from './terminal.service';
       transition:all .15s;
     }
     .icon-btn:hover { background:var(--bg-hover); color:var(--text-primary); }
+    .icon-btn.reconnect-btn { border-color:rgba(88,166,255,.4); color:var(--accent); }
+    .icon-btn.reconnect-btn:hover { background:rgba(88,166,255,.1); }
     .icon-btn mat-icon { font-size:16px; width:16px; height:16px; }
 
     .term-wrapper {
@@ -68,10 +70,10 @@ import { TerminalService } from './terminal.service';
     .tab:not(.active):hover { background:rgba(255,255,255,.04); }
 
     .tab-status-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
-    .tab-status-dot.connected { background:var(--green); }
-    .tab-status-dot.connecting { background:var(--yellow); }
+    .tab-status-dot.connected    { background:var(--green); }
+    .tab-status-dot.connecting   { background:var(--yellow); animation:pulse 1s infinite; }
     .tab-status-dot.disconnected,
-    .tab-status-dot.error { background:var(--red); }
+    .tab-status-dot.error        { background:var(--red); }
 
     .tab-label { flex:1; overflow:hidden; text-overflow:ellipsis; }
 
@@ -120,9 +122,18 @@ import { TerminalService } from './terminal.service';
             <div class="status-dot"></div>
             {{ statusLabel(activeTab()!.status) }}
           </div>
-          <button class="icon-btn" (click)="clearActive()" title="Limpiar terminal">
-            <mat-icon>cleaning_services</mat-icon>
-          </button>
+
+          @if (activeTab()!.status === 'disconnected' || activeTab()!.status === 'error') {
+            <button class="icon-btn reconnect-btn" (click)="reconnect()" title="Reconectar sesión">
+              <mat-icon>refresh</mat-icon>
+            </button>
+          }
+
+          @if (activeTab()!.status === 'connected') {
+            <button class="icon-btn" (click)="clearActive()" title="Limpiar terminal">
+              <mat-icon>cleaning_services</mat-icon>
+            </button>
+          }
         }
       </div>
     </div>
@@ -203,12 +214,10 @@ export class TerminalComponent implements AfterViewInit, OnDestroy {
       if (!paneEl) return;
 
       if (tab.hostElement) {
-        // Move the live DOM subtree (hostEl + xterm internals) — buffer, WS and _parent stay intact
         if (!paneEl.contains(tab.hostElement)) {
           paneEl.appendChild(tab.hostElement);
         }
       } else {
-        // First mount: create host div in real DOM so xterm renderer initializes correctly
         const hostEl = document.createElement('div');
         hostEl.style.cssText = 'height:100%;width:100%;';
         paneEl.appendChild(hostEl);
@@ -219,18 +228,22 @@ export class TerminalComponent implements AfterViewInit, OnDestroy {
 
     const id = this.svc.activeId();
     if (id) {
-      setTimeout(() => {
-        this.fitAndSync(id);
-        this.svc.getTab(id)?.terminal.focus();
-      }, 100);
+      // rAF ensures the pane is fully painted before fitting
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          this.fitAndSync(id);
+          this.svc.getTab(id)?.terminal.focus();
+        }, 50);
+      });
     }
   }
 
-  /** Fit xterm to pane then sync PTY size to backend. */
   private fitAndSync(id: string): void {
     const t = this.svc.getTab(id);
     if (!t) return;
     t.fitAddon.fit();
+    // Force full redraw — fixes nano/vim corruption after resize or re-attach
+    t.terminal.refresh(0, t.terminal.rows - 1);
     this.svc.resize(id, t.terminal.cols, t.terminal.rows);
   }
 
@@ -244,25 +257,30 @@ export class TerminalComponent implements AfterViewInit, OnDestroy {
 
   switchTab(id: string) {
     this.svc.setActive(id);
-    setTimeout(() => {
-      this.fitAndSync(id);
-      this.svc.getTab(id)?.terminal.focus();
-    }, 50);
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        this.fitAndSync(id);
+        this.svc.getTab(id)?.terminal.focus();
+      }, 30);
+    });
   }
 
-  newTab() {
-    this.svc.createTab();
-  }
+  newTab() { this.svc.createTab(); }
 
   clearActive() {
     const id = this.svc.activeId();
     if (id) this.svc.getTab(id)?.terminal.clear();
   }
 
+  reconnect() {
+    const id = this.svc.activeId();
+    if (id) this.svc.reconnect(id);
+  }
+
   statusLabel(status: string): string {
     const labels: Record<string, string> = {
       connecting: 'Conectando...', connected: 'Conectado',
-      disconnected: 'Desconectado', error: 'Error',
+      disconnected: 'Desconectado', error: 'Error de conexión',
     };
     return labels[status] ?? status;
   }
@@ -270,6 +288,5 @@ export class TerminalComponent implements AfterViewInit, OnDestroy {
   ngOnDestroy() {
     this.panesSub?.unsubscribe();
     this.resizeObs?.disconnect();
-    // Sessions live in TerminalService — don't close WS or dispose terminals here
   }
 }

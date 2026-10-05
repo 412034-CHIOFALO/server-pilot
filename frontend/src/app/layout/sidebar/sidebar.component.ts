@@ -24,7 +24,7 @@ interface NavItem { icon: string; label: string; path: string; }
       flex-shrink: 0;
       box-shadow: 0 2px 8px rgba(88,166,255,.3);
     }
-    .logo-icon mat-icon { color: #fff; font-size: 18px; width: 18px; height: 18px; }
+    .logo-svg { width: 20px; height: 20px; display: block; }
     .logo-text { font-size: 15px; font-weight: 700; color: #e6edf3; line-height:1; }
     .logo-sub  { font-size: 10px; color: #8b949e; margin-top: 2px; letter-spacing:.3px; }
 
@@ -56,7 +56,16 @@ interface NavItem { icon: string; label: string; path: string; }
   `],
   template: `
     <div class="logo">
-      <div class="logo-icon"><mat-icon>dns</mat-icon></div>
+      <div class="logo-icon">
+        <!-- Server Pilot logo: two server bars + upward arrow -->
+        <svg class="logo-svg" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="1" y="2.5" width="18" height="5" rx="1.5" fill="rgba(255,255,255,0.93)"/>
+          <rect x="1" y="9.5" width="18" height="5" rx="1.5" fill="rgba(255,255,255,0.6)"/>
+          <circle cx="15.5" cy="5" r="1.2" fill="#3fb950"/>
+          <circle cx="12"   cy="5" r="1.2" fill="rgba(255,255,255,0.5)"/>
+          <path d="M10 18.5 L7.5 15.5 L9.2 15.5 L9.2 14 L10.8 14 L10.8 15.5 L12.5 15.5 Z" fill="rgba(255,255,255,0.88)"/>
+        </svg>
+      </div>
       <div>
         <div class="logo-text">Server Pilot</div>
         <div class="logo-sub">Admin Panel</div>

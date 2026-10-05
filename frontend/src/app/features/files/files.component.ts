@@ -4,9 +4,12 @@ import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDialog } from '@angular/material/dialog';
 import { HttpClient, HttpRequest, HttpEventType } from '@angular/common/http';
 import { ApiService } from '../../core/api.service';
 import { environment } from '../../../environments/environment';
+import { ConfirmDialogComponent } from '../../shared/confirm-dialog.component';
+import { InputDialogComponent } from '../../shared/input-dialog.component';
 
 interface FileEntry {
   name: string;
@@ -408,7 +411,8 @@ export class FilesComponent implements OnInit, OnDestroy {
   constructor(
     private api: ApiService,
     private http: HttpClient,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private dialog: MatDialog
   ) {}
 
   ngOnInit() {
@@ -461,7 +465,7 @@ export class FilesComponent implements OnInit, OnDestroy {
         this.editorContent = r.content;
         this.view.set('editor');
       },
-      error: err => alert(err.error?.error || 'No se pudo abrir el archivo')
+      error: err => this.snackBar.open(err.error?.error || 'No se pudo abrir el archivo', 'Cerrar', { duration: 5000 })
     });
   }
 
@@ -488,8 +492,14 @@ export class FilesComponent implements OnInit, OnDestroy {
   saveFile() {
     this.saving.set(true);
     this.api.put('/api/files/content', { path: this.editingPath(), content: this.editorContent }).subscribe({
-      next: () => { this.saving.set(false); alert('Guardado'); },
-      error: e => { this.saving.set(false); alert(e.error?.error || 'Error al guardar'); }
+      next: () => {
+        this.saving.set(false);
+        this.snackBar.open('Archivo guardado', '', { duration: 2500 });
+      },
+      error: e => {
+        this.saving.set(false);
+        this.snackBar.open(e.error?.error || 'Error al guardar', 'Cerrar', { duration: 5000 });
+      }
     });
   }
 
@@ -575,33 +585,53 @@ export class FilesComponent implements OnInit, OnDestroy {
   }
 
   promptMkdir() {
-    const name = prompt('Nombre de la nueva carpeta:');
-    if (!name) return;
-    const path = this.currentPath().endsWith('/')
-      ? this.currentPath() + name
-      : this.currentPath() + '/' + name;
-    this.api.post('/api/files/mkdir', { path }).subscribe({
-      next: () => this.navigate(this.currentPath()),
-      error: e => alert(e.error?.error || 'Error')
+    const ref = this.dialog.open(InputDialogComponent, {
+      data: { title: 'Nueva carpeta', label: 'Nombre', icon: 'create_new_folder', confirmLabel: 'Crear' }
+    });
+    ref.afterClosed().subscribe((name: string | null) => {
+      if (!name) return;
+      const path = this.currentPath().endsWith('/')
+        ? this.currentPath() + name
+        : this.currentPath() + '/' + name;
+      this.api.post('/api/files/mkdir', { path }).subscribe({
+        next: () => this.navigate(this.currentPath()),
+        error: e => this.snackBar.open(e.error?.error || 'Error al crear carpeta', 'Cerrar', { duration: 5000 })
+      });
     });
   }
 
   renameEntry(e: FileEntry) {
-    const newName = prompt('Nuevo nombre:', e.name);
-    if (!newName || newName === e.name) return;
-    const parent = e.path.substring(0, e.path.lastIndexOf('/')) || '/';
-    const to     = parent.endsWith('/') ? parent + newName : parent + '/' + newName;
-    this.api.post('/api/files/rename', { from: e.path, to }).subscribe({
-      next: () => this.navigate(this.currentPath()),
-      error: err => alert(err.error?.error || 'Error al renombrar')
+    const ref = this.dialog.open(InputDialogComponent, {
+      data: { title: 'Renombrar', label: 'Nuevo nombre', value: e.name, icon: 'drive_file_rename_outline', confirmLabel: 'Renombrar' }
+    });
+    ref.afterClosed().subscribe((newName: string | null) => {
+      if (!newName || newName === e.name) return;
+      const parent = e.path.substring(0, e.path.lastIndexOf('/')) || '/';
+      const to     = parent.endsWith('/') ? parent + newName : parent + '/' + newName;
+      this.api.post('/api/files/rename', { from: e.path, to }).subscribe({
+        next: () => this.navigate(this.currentPath()),
+        error: err => this.snackBar.open(err.error?.error || 'Error al renombrar', 'Cerrar', { duration: 5000 })
+      });
     });
   }
 
   deleteEntry(e: FileEntry) {
-    if (!confirm(`¿Eliminar "${e.name}"?`)) return;
-    this.api.delete(`/api/files?path=${encodeURIComponent(e.path)}`).subscribe({
-      next: () => this.navigate(this.currentPath()),
-      error: err => alert(err.error?.error || 'Error al eliminar')
+    const ref = this.dialog.open(ConfirmDialogComponent, {
+      data: {
+        title: `Eliminar "${e.name}"`,
+        message: e.type === 'dir'
+          ? 'Esta acción eliminará la carpeta y todo su contenido de forma permanente.'
+          : 'Esta acción eliminará el archivo de forma permanente.',
+        confirmLabel: 'Eliminar',
+        confirmDanger: true,
+      }
+    });
+    ref.afterClosed().subscribe((confirmed: boolean) => {
+      if (!confirmed) return;
+      this.api.delete(`/api/files?path=${encodeURIComponent(e.path)}`).subscribe({
+        next: () => this.navigate(this.currentPath()),
+        error: err => this.snackBar.open(err.error?.error || 'Error al eliminar', 'Cerrar', { duration: 5000 })
+      });
     });
   }
 

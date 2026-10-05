@@ -8,11 +8,16 @@ export interface TerminalTab {
   title: string;
   terminal: Terminal;
   fitAddon: FitAddon;
-  /** The div passed to terminal.open() — owned by the service, moved into panes by the component */
   hostElement?: HTMLDivElement;
   ws?: WebSocket;
   status: 'connecting' | 'connected' | 'disconnected' | 'error';
+  reconnectAttempts: number;
+  pingInterval?: ReturnType<typeof setInterval>;
+  reconnectTimer?: ReturnType<typeof setTimeout>;
 }
+
+const PING_INTERVAL_MS = 25_000;
+const MAX_RECONNECT_ATTEMPTS = 5;
 
 @Injectable({ providedIn: 'root' })
 export class TerminalService {
@@ -44,10 +49,13 @@ export class TerminalService {
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
 
-    const tab: TerminalTab = { id, title: `Terminal ${n}`, terminal, fitAddon, status: 'connecting' };
+    const tab: TerminalTab = {
+      id, title: `Terminal ${n}`, terminal, fitAddon,
+      status: 'connecting', reconnectAttempts: 0,
+    };
 
-    // Ctrl+C: copy selection to clipboard (don't send SIGINT), or pass SIGINT if no selection.
-    // Ctrl+V: read clipboard and send to shell. Both handle Shift variants (key is uppercase).
+    // Ctrl+C: copy selection, or pass SIGINT if no selection.
+    // Ctrl+V: paste from clipboard.
     terminal.attachCustomKeyEventHandler((event) => {
       if (event.type !== 'keydown') return true;
       const ctrl = event.ctrlKey;
@@ -58,7 +66,7 @@ export class TerminalService {
           navigator.clipboard.writeText(terminal.getSelection()).catch(() => {});
           return false;
         }
-        return true; // no selection → pass SIGINT to shell
+        return true;
       }
 
       if (ctrl && key === 'v') {
@@ -78,35 +86,113 @@ export class TerminalService {
     this._tabs.update(tabs => [...tabs, tab]);
     this._activeId.set(id);
 
+    await this.connectTab(tab);
+    return id;
+  }
+
+  private async connectTab(tab: TerminalTab): Promise<void> {
+    tab.status = 'connecting';
+    this._tabs.update(t => [...t]);
+
     try {
-      const ws = await this.rt.openSocket('/ws/terminal'); // resolves only after onopen
+      const ws = await this.rt.openSocket('/ws/terminal');
       tab.ws = ws;
       tab.status = 'connected';
+      tab.reconnectAttempts = 0;
       this._tabs.update(t => [...t]);
+
+      this.startPing(tab, ws);
 
       ws.onmessage = ev => {
         if (ev.data instanceof Blob) {
-          ev.data.arrayBuffer().then(buf => terminal.write(new Uint8Array(buf)));
+          ev.data.arrayBuffer().then(buf => tab.terminal.write(new Uint8Array(buf)));
         } else {
-          terminal.write(ev.data as string);
+          tab.terminal.write(ev.data as string);
         }
       };
 
-      ws.onclose = () => { tab.status = 'disconnected'; this._tabs.update(t => [...t]); };
-      ws.onerror = () => { tab.status = 'error'; this._tabs.update(t => [...t]); };
+      ws.onclose = () => {
+        this.stopPing(tab);
+        tab.status = 'disconnected';
+        this._tabs.update(t => [...t]);
+        this.scheduleReconnect(tab.id);
+      };
+
+      ws.onerror = () => {
+        this.stopPing(tab);
+        tab.status = 'error';
+        this._tabs.update(t => [...t]);
+      };
+
     } catch {
       tab.status = 'error';
-      terminal.writeln('\r\n\x1b[31m[No se pudo establecer la conexión SSH]\x1b[0m');
+      tab.terminal.writeln('\r\n\x1b[31m[No se pudo establecer la conexión SSH]\x1b[0m');
       this._tabs.update(t => [...t]);
     }
+  }
 
-    return id;
+  private startPing(tab: TerminalTab, ws: WebSocket): void {
+    this.stopPing(tab);
+    tab.pingInterval = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(new Uint8Array([0x02])); // keepalive ping — backend ignores it
+      }
+    }, PING_INTERVAL_MS);
+  }
+
+  private stopPing(tab: TerminalTab): void {
+    if (tab.pingInterval !== undefined) {
+      clearInterval(tab.pingInterval);
+      tab.pingInterval = undefined;
+    }
+  }
+
+  private scheduleReconnect(id: string): void {
+    const tab = this.getTab(id);
+    if (!tab) return;
+
+    const attempts = tab.reconnectAttempts + 1;
+    if (attempts > MAX_RECONNECT_ATTEMPTS) {
+      tab.terminal.writeln('\r\n\x1b[31m[Reconexión fallida. Usá el botón Reconectar para reintentar.]\x1b[0m');
+      this._tabs.update(t => [...t]);
+      return;
+    }
+
+    tab.reconnectAttempts = attempts;
+    const delayMs = Math.min(1000 * Math.pow(2, attempts - 1), 30_000); // 1s 2s 4s 8s 16s
+    const secs = Math.round(delayMs / 1000);
+    tab.terminal.writeln(`\r\n\x1b[33m[Desconectado. Reintentando en ${secs}s (intento ${attempts}/${MAX_RECONNECT_ATTEMPTS})...]\x1b[0m`);
+    this._tabs.update(t => [...t]);
+
+    clearTimeout(tab.reconnectTimer);
+    tab.reconnectTimer = setTimeout(async () => {
+      const current = this.getTab(id);
+      if (!current || current.status !== 'disconnected') return;
+      await this.connectTab(current);
+      if (current.status === 'connected') {
+        current.terminal.writeln('\r\n\x1b[32m[Reconectado]\x1b[0m');
+      }
+    }, delayMs);
+  }
+
+  async reconnect(id: string): Promise<void> {
+    const tab = this.getTab(id);
+    if (!tab) return;
+    clearTimeout(tab.reconnectTimer);
+    tab.reconnectAttempts = 0;
+    tab.terminal.writeln('\r\n\x1b[33m[Reconectando...]\x1b[0m');
+    await this.connectTab(tab);
+    if (tab.status === 'connected') {
+      tab.terminal.writeln('\r\n\x1b[32m[Reconectado]\x1b[0m');
+    }
   }
 
   closeTab(id: string): void {
     const tab = this._tabs().find(t => t.id === id);
     if (!tab) return;
 
+    this.stopPing(tab);
+    clearTimeout(tab.reconnectTimer);
     tab.ws?.close();
     tab.terminal.dispose();
 
@@ -131,7 +217,7 @@ export class TerminalService {
     if (!tab?.ws || tab.ws.readyState !== WebSocket.OPEN) return;
     const encoded = new TextEncoder().encode(JSON.stringify({ cols, rows }));
     const buf = new Uint8Array(1 + encoded.length);
-    buf[0] = 0x01; // control marker — distinguishes from keyboard input (always text)
+    buf[0] = 0x01;
     buf.set(encoded, 1);
     tab.ws.send(buf);
   }

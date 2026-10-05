@@ -36,11 +36,13 @@ public class TerminalHandler extends AbstractWebSocketHandler {
 
             Session sshSession = jsch.getSession(sshService.getUsername(), sshService.getHost(), sshService.getPort());
             sshSession.setConfig("StrictHostKeyChecking", "no");
+            sshSession.setServerAliveInterval(30); // send SSH keepalive every 30s
+            sshSession.setServerAliveCountMax(6);  // 6 misses = disconnect after 3 min
             sshSession.connect(5000);
 
             ChannelShell channel = (ChannelShell) sshSession.openChannel("shell");
             channel.setPtyType("xterm-256color");
-            channel.setPtySize(220, 50, 0, 0);
+            channel.setPtySize(80, 24, 0, 0); // standard default; frontend will resize immediately
 
             PipedOutputStream pipedOut = new PipedOutputStream();
             PipedInputStream pipedIn = new PipedInputStream(pipedOut);
@@ -93,8 +95,14 @@ public class TerminalHandler extends AbstractWebSocketHandler {
         if (ts == null) return;
 
         ByteBuffer payload = message.getPayload();
+        if (!payload.hasRemaining()) return;
+        byte firstByte = payload.get(payload.position());
+
+        // 0x02 = keepalive ping from browser — ignore silently
+        if (firstByte == 0x02) return;
+
         // Control message: first byte 0x01 signals a PTY resize, not stdin input
-        if (payload.hasRemaining() && payload.get(payload.position()) == 0x01) {
+        if (firstByte == 0x01) {
             payload.position(payload.position() + 1);
             byte[] jsonBytes = new byte[payload.remaining()];
             payload.get(jsonBytes);

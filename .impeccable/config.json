@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "broken-image",
+        "value": "*",
+        "files": [
+          "frontend/src/app/features/files/files.component.ts"
+        ],
+        "createdAt": "2026-10-05T15:48:21.339Z",
+        "reason": "Angular [src] bound conditionally via @if(imageUrl()) — never renders with empty src"
+      }
+    ]
+  }
+}

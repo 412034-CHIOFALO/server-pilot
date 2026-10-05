@@ -6,10 +6,12 @@ import com.serverpilot.docker.DockerLogsHandler;
 import com.serverpilot.metrics.MetricsSocketHandler;
 import com.serverpilot.systemd.JournalHandler;
 import com.serverpilot.terminal.TerminalHandler;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
 import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
+import org.springframework.web.socket.server.standard.ServletServerContainerFactoryBean;
 
 @Configuration
 @EnableWebSocket
@@ -34,6 +36,15 @@ public class WebSocketConfig implements WebSocketConfigurer {
         this.dockerExecHandler = dockerExecHandler;
         this.journalHandler = journalHandler;
         this.ticketHandshakeInterceptor = ticketHandshakeInterceptor;
+    }
+
+    @Bean
+    public ServletServerContainerFactoryBean createWebSocketContainer() {
+        ServletServerContainerFactoryBean container = new ServletServerContainerFactoryBean();
+        container.setMaxSessionIdleTimeout(0L); // disable idle timeout — keepalive handles disconnects
+        container.setMaxTextMessageBufferSize(65536);
+        container.setMaxBinaryMessageBufferSize(65536);
+        return container;
     }
 
     @Override
