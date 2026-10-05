@@ -10,65 +10,100 @@ interface NavItem { icon: string; label: string; path: string; }
   imports: [RouterLink, RouterLinkActive, MatIconModule],
   styles: [`
     :host { display:flex; flex-direction:column; height:100%; overflow:hidden; }
+
+    /* ── Logo area ── */
     .logo {
-      padding: 20px 16px 16px;
-      display: flex; align-items: center; gap: 10px;
+      padding: 18px 16px 14px;
+      display: flex; align-items: center; gap: 11px;
       border-bottom: 1px solid #21262d;
-      margin-bottom: 8px; flex-shrink: 0;
+      margin-bottom: 6px; flex-shrink: 0;
     }
     .logo-icon {
-      width: 34px; height: 34px;
-      background: linear-gradient(135deg, #58a6ff 0%, #1f6feb 100%);
-      border-radius: 8px;
+      width: 36px; height: 36px; flex-shrink: 0;
+      background: linear-gradient(145deg, #6ab0ff 0%, #1658c8 100%);
+      border-radius: 9px;
       display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0;
-      box-shadow: 0 2px 8px rgba(88,166,255,.3);
+      box-shadow:
+        0 0 0 1px rgba(88,166,255,.22),
+        0 2px 12px rgba(30,100,220,.4);
     }
-    .logo-svg { width: 20px; height: 20px; display: block; }
-    .logo-text { font-size: 15px; font-weight: 700; color: #e6edf3; line-height:1; }
-    .logo-sub  { font-size: 10px; color: #8b949e; margin-top: 2px; letter-spacing:.3px; }
+    .logo-mark { width: 22px; height: 22px; display: block; }
+    .logo-name {
+      display: flex; flex-direction: column; gap: 1px;
+    }
+    .logo-text {
+      font-size: 14.5px; font-weight: 700; letter-spacing: -0.2px;
+      color: #e6edf3; line-height: 1;
+    }
+    .logo-sub {
+      font-size: 9.5px; font-weight: 500; letter-spacing: 0.5px;
+      text-transform: uppercase; color: #484f58; line-height: 1;
+    }
 
-    nav { padding: 4px 8px; flex: 1; overflow-y: auto; }
+    /* ── Nav ── */
+    nav { padding: 4px 8px; flex: 1; overflow-y: auto; scrollbar-width: none; }
+    nav::-webkit-scrollbar { display: none; }
+
     .section-label {
-      font-size: 10px; font-weight: 600; letter-spacing: 1px;
-      text-transform: uppercase; color: #484f58;
-      padding: 12px 8px 4px;
+      font-size: 9.5px; font-weight: 600; letter-spacing: 1.1px;
+      text-transform: uppercase; color: #3d444c;
+      padding: 14px 8px 5px;
     }
     a {
       display: flex; align-items: center; gap: 10px;
-      padding: 10px 10px; min-height: 44px;
-      border-radius: 8px; text-decoration: none;
-      color: #8b949e; font-size: 13px; font-weight: 500;
-      transition: background .15s, color .15s;
-      margin-bottom: 2px; cursor: pointer;
+      padding: 9px 10px; min-height: 40px;
+      border-radius: 7px; text-decoration: none;
+      color: #6e7681; font-size: 13px; font-weight: 500;
+      transition: background .12s, color .12s;
+      margin-bottom: 1px;
     }
-    a:hover { background: #21262d; color: #e6edf3; }
-    a.active { background: rgba(88,166,255,.12); color: #58a6ff; }
+    a:hover { background: #1c2128; color: #c9d1d9; }
+    a.active { background: rgba(88,166,255,.1); color: #58a6ff; }
     a.active mat-icon { color: #58a6ff; }
-    mat-icon { font-size: 18px; width: 18px; height: 18px; color: inherit; transition: color .15s; flex-shrink: 0; }
+    mat-icon {
+      font-size: 17px; width: 17px; height: 17px;
+      color: inherit; transition: color .12s; flex-shrink: 0;
+    }
 
+    /* ── Footer ── */
     .footer {
-      padding: 12px 16px; flex-shrink: 0;
+      padding: 10px 16px; flex-shrink: 0;
       border-top: 1px solid #21262d;
-      font-size: 10px; color: #484f58;
-      text-align: center; letter-spacing:.3px;
+      display: flex; align-items: center; gap: 7px;
+    }
+    .version-badge {
+      font-size: 10px; font-weight: 600; letter-spacing: .3px;
+      color: #3d444c; background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 4px; padding: 2px 6px;
+      line-height: 1.4;
     }
   `],
   template: `
     <div class="logo">
       <div class="logo-icon">
-        <!-- Server Pilot logo: two server bars + upward arrow -->
-        <svg class="logo-svg" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect x="1" y="2.5" width="18" height="5" rx="1.5" fill="rgba(255,255,255,0.93)"/>
-          <rect x="1" y="9.5" width="18" height="5" rx="1.5" fill="rgba(255,255,255,0.6)"/>
-          <circle cx="15.5" cy="5" r="1.2" fill="#3fb950"/>
-          <circle cx="12"   cy="5" r="1.2" fill="rgba(255,255,255,0.5)"/>
-          <path d="M10 18.5 L7.5 15.5 L9.2 15.5 L9.2 14 L10.8 14 L10.8 15.5 L12.5 15.5 Z" fill="rgba(255,255,255,0.88)"/>
+        <!--
+          Server Pilot mark: two server bars (left) + terminal chevron › (right).
+          Bars = infrastructure; chevron = the command / pilot prompt.
+          Green dot = live status. Consistent 1.8px stroke everywhere.
+        -->
+        <svg class="logo-mark" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Server bar 1 (top) -->
+          <rect x="2" y="6.5" width="10.5" height="3.8" rx="1.4" fill="white" opacity="0.93"/>
+          <!-- Server bar 2 (bottom) -->
+          <rect x="2" y="13.7" width="10.5" height="3.8" rx="1.4" fill="white" opacity="0.55"/>
+          <!-- Terminal chevron › — the pilot/command element -->
+          <path d="M12 5 L20.5 12 L12 19"
+                stroke="white" stroke-width="2.4"
+                stroke-linecap="round" stroke-linejoin="round"
+                fill="none" opacity="0.97"/>
+          <!-- Live status dot on top bar -->
+          <circle cx="6.5" cy="8.4" r="1.4" fill="#3fb950"/>
         </svg>
       </div>
-      <div>
-        <div class="logo-text">Server Pilot</div>
-        <div class="logo-sub">Admin Panel</div>
+      <div class="logo-name">
+        <span class="logo-text">Server Pilot</span>
+        <span class="logo-sub">Admin Panel</span>
       </div>
     </div>
 
@@ -93,7 +128,9 @@ interface NavItem { icon: string; label: string; path: string; }
       }
     </nav>
 
-    <div class="footer">Server Pilot v2.0</div>
+    <div class="footer">
+      <span class="version-badge">v2.1</span>
+    </div>
   `
 })
 export class SidebarComponent {
@@ -105,16 +142,16 @@ export class SidebarComponent {
     { icon: 'memory',        label: 'Procesos',   path: '/procesos' },
   ];
   infraItems: NavItem[] = [
-    { icon: 'apps',               label: 'Accesos',     path: '/accesos' },
-    { icon: 'inventory_2',        label: 'Containers',  path: '/containers' },
-    { icon: 'folder',             label: 'Archivos',    path: '/archivos' },
-    { icon: 'terminal',           label: 'Terminal',    path: '/terminal' },
-    { icon: 'power_settings_new', label: 'iDRAC',       path: '/idrac' },
-    { icon: 'bolt',               label: 'Acciones',    path: '/acciones' },
-    { icon: 'tune',               label: 'Systemd',     path: '/systemd' },
+    { icon: 'apps',               label: 'Accesos',    path: '/accesos' },
+    { icon: 'inventory_2',        label: 'Containers', path: '/containers' },
+    { icon: 'folder',             label: 'Archivos',   path: '/archivos' },
+    { icon: 'terminal',           label: 'Terminal',   path: '/terminal' },
+    { icon: 'power_settings_new', label: 'iDRAC',      path: '/idrac' },
+    { icon: 'bolt',               label: 'Acciones',   path: '/acciones' },
+    { icon: 'tune',               label: 'Systemd',    path: '/systemd' },
   ];
   systemItems: NavItem[] = [
-    { icon: 'history',  label: 'Auditoría',       path: '/auditoria' },
-    { icon: 'settings', label: 'Configuración',   path: '/configuracion' },
+    { icon: 'history',  label: 'Auditoría',     path: '/auditoria' },
+    { icon: 'settings', label: 'Configuración', path: '/configuracion' },
   ];
 }
