@@ -10,6 +10,9 @@ import org.springframework.web.socket.*;
 import org.springframework.web.socket.handler.AbstractWebSocketHandler;
 
 import java.io.*;
+import java.lang.reflect.Method;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -44,7 +47,7 @@ public class DockerExecHandler extends AbstractWebSocketHandler {
                 + " sh -c 'exec bash 2>/dev/null || exec sh'");
             channel.setPty(true);
             channel.setPtyType("xterm-256color");
-            channel.setPtySize(220, 50, 0, 0);
+            channel.setPtySize(80, 24, 0, 0); // standard default; frontend will resize
 
             PipedOutputStream stdinPipe = new PipedOutputStream();
             PipedInputStream stdinStream = new PipedInputStream(stdinPipe, 65536);
@@ -96,14 +99,54 @@ public class DockerExecHandler extends AbstractWebSocketHandler {
     protected void handleBinaryMessage(WebSocketSession session, BinaryMessage message) {
         ExecSession es = sessions.get(session.getId());
         if (es == null) return;
+
+        ByteBuffer payload = message.getPayload();
+        if (!payload.hasRemaining()) return;
+        byte first = payload.get(payload.position());
+
+        // 0x01 = PTY resize (same protocol as TerminalHandler)
+        if (first == 0x01) {
+            payload.position(payload.position() + 1);
+            byte[] jsonBytes = new byte[payload.remaining()];
+            payload.get(jsonBytes);
+            applyResize(es.channel(), jsonBytes);
+            return;
+        }
+
         try {
-            byte[] bytes = new byte[message.getPayload().remaining()];
-            message.getPayload().get(bytes);
+            byte[] bytes = new byte[payload.remaining()];
+            payload.get(bytes);
             es.stdin().write(bytes);
             es.stdin().flush();
         } catch (IOException e) {
             log.error("Write to docker exec stdin failed", e);
         }
+    }
+
+    private void applyResize(ChannelExec channel, byte[] jsonBytes) {
+        try {
+            String json = new String(jsonBytes, StandardCharsets.UTF_8);
+            int cols = jsonInt(json, "cols");
+            int rows = jsonInt(json, "rows");
+            if (cols > 0 && rows > 0) {
+                // ChannelExec inherits setPtySize from ChannelSession via reflection
+                Method m = channel.getClass().getMethod("setPtySize", int.class, int.class, int.class, int.class);
+                m.invoke(channel, cols, rows, 0, 0);
+                log.debug("Docker exec PTY resized to {}x{}", cols, rows);
+            }
+        } catch (Exception e) {
+            log.debug("PTY resize on exec channel skipped: {}", e.getMessage());
+        }
+    }
+
+    private static int jsonInt(String json, String key) {
+        String marker = "\"" + key + "\":";
+        int i = json.indexOf(marker);
+        if (i < 0) return -1;
+        i += marker.length();
+        int j = i;
+        while (j < json.length() && Character.isDigit(json.charAt(j))) j++;
+        return j > i ? Integer.parseInt(json.substring(i, j)) : -1;
     }
 
     @Override

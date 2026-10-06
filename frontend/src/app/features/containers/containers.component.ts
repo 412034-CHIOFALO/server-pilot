@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { FormsModule } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { ApiService } from '../../core/api.service';
@@ -150,9 +151,9 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
       <h2 class="page-title" style="margin:0"><mat-icon>inventory_2</mat-icon> Contenedores</h2>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <div class="filter-tabs">
-          <button class="filter-tab" [class.active]="filter==='all'"     (click)="filter='all'">Todos</button>
-          <button class="filter-tab" [class.active]="filter==='running'" (click)="filter='running'">Running</button>
-          <button class="filter-tab" [class.active]="filter==='stopped'" (click)="filter='stopped'">Stopped</button>
+          <button class="filter-tab" [class.active]="filter()==='all'"     (click)="filter.set('all')">Todos</button>
+          <button class="filter-tab" [class.active]="filter()==='running'" (click)="filter.set('running')">Running</button>
+          <button class="filter-tab" [class.active]="filter()==='stopped'" (click)="filter.set('stopped')">Stopped</button>
         </div>
         <button class="icon-btn" (click)="load()" matTooltip="Refrescar" style="width:34px;height:34px;border:1px solid var(--border);border-radius:8px">
           <mat-icon>refresh</mat-icon>
@@ -175,7 +176,7 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
     } @else {
       @for (group of groups(); track group.name) {
         <div class="project-block fade-in">
-          <div class="project-header" (click)="group.open = !group.open">
+          <div class="project-header" (click)="toggleGroup(group.name)">
             <mat-icon style="color:var(--accent);font-size:18px;width:18px;height:18px">folder_open</mat-icon>
             <span class="project-name">{{ group.name }}</span>
             <span class="project-count">{{ group.containers.length }}</span>
@@ -197,7 +198,7 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
                 <mat-icon>layers_clear</mat-icon>
               </button>
             </div>
-            <mat-icon class="chevron" [class.open]="group.open">chevron_right</mat-icon>
+            <mat-icon class="chevron" [class.open]="isGroupOpen(group.name)">chevron_right</mat-icon>
           </div>
 
           @if (composeState(group.name); as cs) {
@@ -222,7 +223,7 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
             </div>
           }
 
-          @if (group.open) {
+          @if (isGroupOpen(group.name)) {
             <div class="container-scroll">
             <div class="col-header">
               <span>Nombre</span><span>Imagen</span><span>Estado</span><span>Puertos</span><span>Acciones</span>
@@ -287,12 +288,16 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
 })
 export class ContainersComponent implements OnInit, OnDestroy {
   containers = signal<Container[]>([]);
-  filter = 'all';
+  // signal so computed() tracks it — plain string breaks the filter
+  filter = signal<'all'|'running'|'stopped'>('all');
   loading = signal(true);
   expandedId = signal('');
   logsText = signal('');
   consoleContainer = signal<Container | null>(null);
   showLogsScrollBtn = signal(false);
+
+  // track which groups are collapsed (default: all open)
+  private closedGroups = signal<Set<string>>(new Set());
 
   @ViewChild('logsBody') private logsBody?: ElementRef<HTMLDivElement>;
   private logsAtBottom = true;
@@ -303,11 +308,13 @@ export class ContainersComponent implements OnInit, OnDestroy {
 
   filtered = computed(() => {
     const list = this.containers();
-    if (this.filter === 'running') return list.filter(c => c.state === 'running');
-    if (this.filter === 'stopped') return list.filter(c => c.state !== 'running');
+    const f = this.filter();
+    if (f === 'running') return list.filter(c => c.state === 'running');
+    if (f === 'stopped') return list.filter(c => c.state !== 'running');
     return list;
   });
 
+  // groups does NOT carry open state — that lives in closedGroups signal
   groups = computed<ProjectGroup[]>(() => {
     const map = new Map<string, Container[]>();
     for (const c of this.filtered()) {
@@ -320,7 +327,25 @@ export class ContainersComponent implements OnInit, OnDestroy {
       .map(([name, containers]) => ({ name, containers, open: true }));
   });
 
-  constructor(private api: ApiService, private rt: RealtimeService, private dialog: MatDialog) {
+  isGroupOpen(name: string): boolean {
+    return !this.closedGroups().has(name);
+  }
+
+  toggleGroup(name: string): void {
+    this.closedGroups.update(s => {
+      const next = new Set(s);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }
+
+  constructor(
+    private api: ApiService,
+    private rt: RealtimeService,
+    private dialog: MatDialog,
+    private snackBar: MatSnackBar,
+  ) {
     effect(() => {
       const _ = this.logsText();
       if (this.logsAtBottom) {
@@ -344,7 +369,7 @@ export class ContainersComponent implements OnInit, OnDestroy {
   action(type: 'start'|'stop'|'restart', c: Container) {
     this.api.post(`/api/docker/containers/${c.id}/${type}`).subscribe({
       next: () => setTimeout(() => this.load(), 1000),
-      error: err => alert(err.error?.error || 'Error')
+      error: err => this.snackBar.open(err.error?.error || 'Error al ejecutar acción', 'Cerrar', { duration: 5000 })
     });
   }
 
@@ -360,7 +385,7 @@ export class ContainersComponent implements OnInit, OnDestroy {
       if (!ok) return;
       this.api.delete(`/api/docker/containers/${c.id}`).subscribe({
         next: () => { this.load(); if (this.expandedId() === c.id) this.closeLogs(); },
-        error: err => alert(err.error?.error || 'Error')
+        error: err => this.snackBar.open(err.error?.error || 'Error al eliminar', 'Cerrar', { duration: 5000 })
       });
     });
   }

@@ -147,7 +147,13 @@ export class ContainerConsoleComponent implements AfterViewInit, OnDestroy {
     });
 
     this.resizeObserver = new ResizeObserver(() => {
-      setTimeout(() => this.fitAddon?.fit(), 50);
+      setTimeout(() => {
+        this.fitAddon?.fit();
+        if (this.term) {
+          this.term.refresh(0, this.term.rows - 1);
+          this.sendResize(this.term.cols, this.term.rows);
+        }
+      }, 50);
     });
     this.resizeObserver.observe(this.termContainer.nativeElement);
   }
@@ -170,6 +176,12 @@ export class ContainerConsoleComponent implements AfterViewInit, OnDestroy {
           if (this.atBottom) this.term?.scrollToBottom();
         }
       };
+      // sync PTY size immediately after connect
+      setTimeout(() => {
+        this.fitAddon?.fit();
+        if (this.term) this.sendResize(this.term.cols, this.term.rows);
+      }, 80);
+
       this.ws.onclose = () => {
         this.statusMsg.set('Desconectado'); this.statusClass.set('disconnected');
         this.term?.writeln('\r\n\x1b[33m[Sesión terminada]\x1b[0m');
@@ -179,6 +191,15 @@ export class ContainerConsoleComponent implements AfterViewInit, OnDestroy {
       this.statusMsg.set('Error'); this.statusClass.set('disconnected');
       this.term?.writeln('\r\n\x1b[31m[No se pudo conectar al contenedor]\x1b[0m');
     }
+  }
+
+  private sendResize(cols: number, rows: number): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    const encoded = new TextEncoder().encode(JSON.stringify({ cols, rows }));
+    const buf = new Uint8Array(1 + encoded.length);
+    buf[0] = 0x01;
+    buf.set(encoded, 1);
+    this.ws.send(buf);
   }
 
   scrollToBottom() {

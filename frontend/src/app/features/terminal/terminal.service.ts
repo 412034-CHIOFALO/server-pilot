@@ -54,28 +54,25 @@ export class TerminalService {
       status: 'connecting', reconnectAttempts: 0,
     };
 
-    // Ctrl+C: copy selection, or pass SIGINT if no selection.
-    // Ctrl+V: paste from clipboard.
+    // Ctrl+C: copy selection (no clipboard prompt), or send SIGINT if nothing selected.
+    // Ctrl+V: NOT intercepted — xterm.js handles paste via DOM 'paste' event (no permission prompt).
     terminal.attachCustomKeyEventHandler((event) => {
       if (event.type !== 'keydown') return true;
       const ctrl = event.ctrlKey;
       const key = event.key.toLowerCase();
 
+      // Ctrl+C: copy selection to clipboard (no permission prompt), or send SIGINT if no selection
       if (ctrl && key === 'c') {
         if (terminal.hasSelection()) {
           navigator.clipboard.writeText(terminal.getSelection()).catch(() => {});
           return false;
         }
-        return true;
+        return true; // no selection → SIGINT
       }
 
-      if (ctrl && key === 'v') {
-        navigator.clipboard.readText()
-          .then(text => { if (tab.ws?.readyState === WebSocket.OPEN) tab.ws.send(text); })
-          .catch(() => {});
-        return false;
-      }
-
+      // Ctrl+V: let xterm.js handle paste natively via the DOM 'paste' event — no clipboard
+      // permission prompt. Intercepting it here with clipboard.readText() triggers the browser
+      // permission dialog on every paste.
       return true;
     });
 
