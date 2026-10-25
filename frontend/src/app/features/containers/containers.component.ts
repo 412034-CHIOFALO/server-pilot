@@ -181,20 +181,28 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
             <span class="project-name">{{ group.name }}</span>
             <span class="project-count">{{ group.containers.length }}</span>
             <div class="compose-btns" (click)="$event.stopPropagation()">
-              <button class="compose-btn" [disabled]="isComposeRunning(group.name)"
-                      matTooltip="Levantar todo (up -d)" (click)="composeAction(group.name, 'up')">
+              <button class="compose-btn"
+                      [disabled]="isComposeRunning(group.name) || allRunning(group)"
+                      [matTooltip]="allRunning(group) ? 'Stack ya está corriendo' : 'Levantar todo (up -d)'"
+                      (click)="composeAction(group.name, 'up')">
                 <mat-icon>play_arrow</mat-icon>
               </button>
-              <button class="compose-btn" [disabled]="isComposeRunning(group.name)"
-                      matTooltip="Detener todo (stop)" (click)="composeAction(group.name, 'stop')">
+              <button class="compose-btn"
+                      [disabled]="isComposeRunning(group.name) || allStopped(group)"
+                      [matTooltip]="allStopped(group) ? 'Stack ya está detenido' : 'Detener todo (stop)'"
+                      (click)="composeAction(group.name, 'stop')">
                 <mat-icon>stop</mat-icon>
               </button>
-              <button class="compose-btn" [disabled]="isComposeRunning(group.name)"
-                      matTooltip="Reiniciar todo (restart)" (click)="composeAction(group.name, 'restart')">
+              <button class="compose-btn"
+                      [disabled]="isComposeRunning(group.name) || allStopped(group)"
+                      [matTooltip]="allStopped(group) ? 'Stack detenido — levantalo primero' : 'Reiniciar todo (restart)'"
+                      (click)="composeAction(group.name, 'restart')">
                 <mat-icon>restart_alt</mat-icon>
               </button>
-              <button class="compose-btn danger" [disabled]="isComposeRunning(group.name)"
-                      matTooltip="Bajar stack (down)" (click)="composeDown(group.name)">
+              <button class="compose-btn danger"
+                      [disabled]="isComposeRunning(group.name) || allStopped(group)"
+                      [matTooltip]="allStopped(group) ? 'Stack ya está bajado' : 'Bajar stack (down)'"
+                      (click)="composeDown(group.name)">
                 <mat-icon>layers_clear</mat-icon>
               </button>
             </div>
@@ -329,6 +337,16 @@ export class ContainersComponent implements OnInit, OnDestroy {
 
   isGroupOpen(name: string): boolean {
     return !this.closedGroups().has(name);
+  }
+
+  /** true if every container in the group is running */
+  allRunning(group: ProjectGroup): boolean {
+    return group.containers.length > 0 && group.containers.every(c => c.state === 'running');
+  }
+
+  /** true if every container in the group is stopped/exited */
+  allStopped(group: ProjectGroup): boolean {
+    return group.containers.length > 0 && group.containers.every(c => c.state !== 'running');
   }
 
   toggleGroup(name: string): void {
