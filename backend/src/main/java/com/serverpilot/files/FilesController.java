@@ -121,6 +121,28 @@ public class FilesController {
         }
     }
 
+    @GetMapping("/search")
+    public ResponseEntity<?> search(
+            @RequestParam String path,
+            @RequestParam String name) {
+        if (path == null || path.isBlank() || name == null || name.isBlank())
+            return ResponseEntity.badRequest().body(Map.of("error", "path y name requeridos"));
+        try {
+            // sanitize: no shell metacharacters in path or name
+            String safePath = path.replaceAll("[;&|`$<>]", "");
+            String safeName = name.replaceAll("[;&|`$<>]", "");
+            String cmd = "find " + safePath + " -maxdepth 8 -iname '*" + safeName + "*' -not -path '*/.*' 2>/dev/null | head -200";
+            com.serverpilot.ssh.ExecResult r = sftpService.execSearch(cmd);
+            List<String> results = new java.util.ArrayList<>();
+            for (String line : r.stdout().split("\n")) {
+                if (!line.isBlank()) results.add(line.trim());
+            }
+            return ResponseEntity.ok(results);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @PostMapping("/rename")
     public ResponseEntity<?> rename(@RequestBody Map<String, String> body) {
         String from = body.get("from");

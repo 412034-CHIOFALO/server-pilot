@@ -172,4 +172,9 @@ public class SftpService {
     public void rename(String from, String to) throws Exception {
         exec(sftp -> { sftp.rename(from, to); return null; });
     }
+
+    /** Run a read-only shell command via SSH (used for file search). */
+    public com.serverpilot.ssh.ExecResult execSearch(String cmd) throws Exception {
+        return sshService.execCommand(cmd, 15_000);
+    }
 }

@@ -68,7 +68,8 @@ public class DockerService {
                 c.getStatus(),
                 c.getState(),
                 ports,
-                project
+                project,
+                ""  // restartPolicy: fetched on-demand via /restart-policy endpoint
             ));
         }
         return result;

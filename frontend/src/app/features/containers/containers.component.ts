@@ -11,7 +11,8 @@ import { RealtimeService } from '../../core/realtime.service';
 import { ContainerConsoleComponent } from './container-console.component';
 import { ConfirmDialogComponent, ConfirmDialogData } from '../../shared/confirm-dialog.component';
 
-interface Container { id:string; shortId:string; name:string; image:string; status:string; state:string; ports:string[]; project:string; }
+interface Container { id:string; shortId:string; name:string; image:string; status:string; state:string; ports:string[]; project:string; restartPolicy:string; }
+interface ContainerStats { id:string; cpu:string; mem:string; }
 interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
 
 @Component({
@@ -78,15 +79,15 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
     .container-scroll { overflow-x:auto; }
     .container-list { background:var(--bg-primary); min-width:520px; }
     .container-row {
-      display:grid; grid-template-columns:1fr 1.2fr 100px 1fr auto;
+      display:grid; grid-template-columns:1fr 1.2fr 100px 120px 1fr auto;
       align-items:center; gap:16px;
       padding:10px 16px; border-top:1px solid var(--border-subtle);
       transition:background .15s;
     }
     .container-row:hover { background:var(--bg-tertiary); }
     .col-header {
-      display:grid; grid-template-columns:1fr 1.2fr 100px 1fr auto;
-      gap:16px; padding:8px 16px; min-width:520px;
+      display:grid; grid-template-columns:1fr 1.2fr 100px 120px 1fr auto;
+      gap:16px; padding:8px 16px; min-width:600px;
       background:var(--bg-secondary); border-top:1px solid var(--border-subtle);
     }
     .col-header span { font-size:10px; font-weight:600; letter-spacing:.6px; text-transform:uppercase; color:var(--text-muted); }
@@ -105,6 +106,17 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
     .icon-btn mat-icon { font-size:16px; width:16px; height:16px; }
     .icon-btn.danger:hover { background:rgba(248,81,73,.12); color:var(--red); }
     .icon-btn:disabled { opacity:.35; cursor:not-allowed; }
+    .icon-btn.watching { color:var(--green) !important; background:rgba(63,185,80,.1); }
+    .stats-cell { font-size:11px; color:var(--text-muted); font-family:monospace; white-space:nowrap; }
+    .stats-cpu { color:var(--accent); }
+    .alert-badge {
+      display:inline-flex; align-items:center; gap:4px;
+      background:rgba(248,81,73,.12); color:var(--red);
+      border:1px solid rgba(248,81,73,.3); border-radius:20px;
+      padding:2px 10px; font-size:11px; font-weight:600;
+      animation:fadeIn .3s;
+    }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:none} }
 
     .logs-panel {
       background:var(--bg-primary); border-top:1px solid var(--border);
@@ -148,7 +160,15 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
   `],
   template: `
     <div class="toolbar">
-      <h2 class="page-title" style="margin:0"><mat-icon>inventory_2</mat-icon> Contenedores</h2>
+      <div style="display:flex;align-items:center;gap:12px">
+        <h2 class="page-title" style="margin:0"><mat-icon>inventory_2</mat-icon> Contenedores</h2>
+        @if (recentAlerts().length > 0) {
+          <div class="alert-badge">
+            <mat-icon style="font-size:13px;width:13px;height:13px">warning_amber</mat-icon>
+            {{ recentAlerts()[0] }}
+          </div>
+        }
+      </div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <div class="filter-tabs">
           <button class="filter-tab" [class.active]="filter()==='all'"     (click)="filter.set('all')">Todos</button>
@@ -234,7 +254,7 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
           @if (isGroupOpen(group.name)) {
             <div class="container-scroll">
             <div class="col-header">
-              <span>Nombre</span><span>Imagen</span><span>Estado</span><span>Puertos</span><span>Acciones</span>
+              <span>Nombre</span><span>Imagen</span><span>Estado</span><span>CPU / Mem</span><span>Puertos</span><span>Acciones</span>
             </div>
             <div class="container-list">
               @for (c of group.containers; track c.id) {
@@ -242,6 +262,15 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
                   <div class="cname">{{ c.name }}</div>
                   <div class="cimage" [matTooltip]="c.image">{{ c.image }}</div>
                   <div><span [class]="'badge badge-' + c.state">{{ c.state }}</span></div>
+                  <div class="stats-cell">
+                    @if (getStats(c.id); as s) {
+                      <span class="stats-cpu">{{ s.cpu }}</span>
+                      <span style="color:var(--border)"> · </span>
+                      <span>{{ s.mem }}</span>
+                    } @else {
+                      <span>—</span>
+                    }
+                  </div>
                   <div class="cports">{{ c.ports.join(', ') || '—' }}</div>
                   <div class="actions">
                     <button class="icon-btn" matTooltip="Start"
@@ -263,6 +292,11 @@ interface ProjectGroup { name:string; containers:Container[]; open:boolean; }
                       [disabled]="c.state!=='running'"
                       [style.color]="consoleContainer()?.id===c.id ? 'var(--accent)' : ''">
                       <mat-icon>terminal</mat-icon>
+                    </button>
+                    <button class="icon-btn" [class.watching]="isWatching(c)"
+                            [matTooltip]="isWatching(c) ? 'Watchdog activo — click para desactivar' : 'Activar watchdog (restart on-failure)'"
+                            (click)="toggleWatch(c)">
+                      <mat-icon>{{ isWatching(c) ? 'visibility' : 'visibility_off' }}</mat-icon>
                     </button>
                     <button class="icon-btn danger" matTooltip="Eliminar" (click)="confirmRemove(c)">
                       <mat-icon>delete</mat-icon>
@@ -313,6 +347,10 @@ export class ContainersComponent implements OnInit, OnDestroy {
   private interval?: ReturnType<typeof setInterval>;
 
   composeStates = signal<Record<string, {running:boolean; output:string; error:boolean}>>({});
+  statsMap = signal<Record<string, ContainerStats>>({});
+  recentAlerts = signal<string[]>([]);
+  private prevStates = new Map<string, string>(); // id → state for alert detection
+  private statsInterval?: ReturnType<typeof setInterval>;
 
   filtered = computed(() => {
     const list = this.containers();
@@ -375,12 +413,73 @@ export class ContainersComponent implements OnInit, OnDestroy {
     });
   }
 
-  ngOnInit() { this.load(); this.interval = setInterval(() => this.load(), 10000); }
+  ngOnInit() {
+    this.load();
+    this.loadStats();
+    this.interval = setInterval(() => this.load(), 10000);
+    this.statsInterval = setInterval(() => this.loadStats(), 15000);
+  }
 
   load() {
     this.api.get<Container[]>('/api/docker/containers?all=true').subscribe({
-      next: d => { this.containers.set(d); this.loading.set(false); },
+      next: d => {
+        this.detectAlerts(d);
+        this.containers.set(d);
+        this.loading.set(false);
+      },
       error: () => this.loading.set(false)
+    });
+  }
+
+  private detectAlerts(fresh: Container[]) {
+    const alerts: string[] = [];
+    for (const c of fresh) {
+      const prev = this.prevStates.get(c.id);
+      if (prev && prev === 'running' && c.state !== 'running') {
+        alerts.push(`${c.name} se detuvo`);
+      }
+      this.prevStates.set(c.id, c.state);
+    }
+    if (alerts.length > 0) {
+      this.recentAlerts.set(alerts);
+      setTimeout(() => this.recentAlerts.set([]), 30000);
+    }
+  }
+
+  loadStats() {
+    this.api.get<ContainerStats[]>('/api/docker/stats').subscribe({
+      next: list => {
+        const map: Record<string, ContainerStats> = {};
+        for (const s of list) { map[s.id] = s; }
+        this.statsMap.set(map);
+      },
+      error: () => {}
+    });
+  }
+
+  getStats(id: string): ContainerStats | undefined {
+    // stats id is 12-char short id or full id
+    const map = this.statsMap();
+    return map[id] ?? map[id.substring(0, 12)];
+  }
+
+  isWatching(c: Container): boolean {
+    return c.restartPolicy?.startsWith('on-failure') ?? false;
+  }
+
+  toggleWatch(c: Container) {
+    const next = this.isWatching(c) ? 'no' : 'on-failure';
+    this.api.post<{restartPolicy: string}>(`/api/docker/containers/${c.id}/restart-policy`, { policy: next }).subscribe({
+      next: r => {
+        this.containers.update(list => list.map(x =>
+          x.id === c.id ? { ...x, restartPolicy: r.restartPolicy } : x
+        ));
+        const msg = next === 'on-failure'
+          ? `Watchdog activado en ${c.name} — se reiniciará si falla`
+          : `Watchdog desactivado en ${c.name}`;
+        this.snackBar.open(msg, '', { duration: 3000 });
+      },
+      error: err => this.snackBar.open(err.error?.error || 'Error', 'Cerrar', { duration: 5000 })
     });
   }
 
@@ -494,5 +593,9 @@ export class ContainersComponent implements OnInit, OnDestroy {
     this.composeStates.update(s => { const n = { ...s }; delete n[project]; return n; });
   }
 
-  ngOnDestroy() { clearInterval(this.interval); this.logsWs?.close(); }
+  ngOnDestroy() {
+    clearInterval(this.interval);
+    clearInterval(this.statsInterval);
+    this.logsWs?.close();
+  }
 }

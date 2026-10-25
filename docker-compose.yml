@@ -21,9 +21,18 @@ services:
   server-pilot-frontend:
     build: ./frontend
     ports:
-      - "127.0.0.1:3000:80"
+      - "0.0.0.0:12332:80"
     depends_on:
       - server-pilot-backend
+    restart: always
+
+  duckdns:
+    image: linuxserver/duckdns:latest
+    environment:
+      - SUBDOMAINS=serverpiloter
+      - TOKEN=e6ef2309-3e45-4566-bea0-f07685449d2d
+      - LOG_FILE=false
+      - TZ=America/Argentina/Buenos_Aires
     restart: always
 
 volumes:

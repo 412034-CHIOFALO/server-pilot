@@ -156,6 +156,67 @@ public class DockerController {
         };
     }
 
+    /** Returns current restart policy for a single container via SSH docker inspect. */
+    @GetMapping("/containers/{id}/restart-policy")
+    public ResponseEntity<Map<String, String>> getRestartPolicy(@PathVariable String id) {
+        try {
+            String sanitized = id.replaceAll("[^a-zA-Z0-9_.-]", "");
+            ExecResult r = sshService.execCommand(
+                "docker inspect --format '{{.HostConfig.RestartPolicy.Name}}' " + sanitized);
+            String policy = r.stdout().trim().replaceAll("'", "");
+            return ResponseEntity.ok(Map.of("restartPolicy", policy));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** Sets restart policy: "on-failure:3" to enable watching, "no" to disable. */
+    @PostMapping("/containers/{id}/restart-policy")
+    public ResponseEntity<Map<String, String>> setRestartPolicy(
+            @PathVariable String id,
+            @RequestBody Map<String, String> body) {
+        try {
+            String sanitized = id.replaceAll("[^a-zA-Z0-9_.-]", "");
+            String policy = "on-failure".equals(body.get("policy")) ? "on-failure:3" : "no";
+            ExecResult r = sshService.execCommand(
+                "docker update --restart=" + policy + " " + sanitized);
+            String status = r.exitCode() == 0 ? "OK" : "ERROR";
+            auditService.log("DOCKER_RESTART_POLICY", sanitized, status, "policy=" + policy);
+            if (r.exitCode() != 0) {
+                return ResponseEntity.badRequest().body(Map.of("error", r.stderr().trim()));
+            }
+            return ResponseEntity.ok(Map.of("restartPolicy", policy));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** One-shot stats snapshot for all running containers via SSH docker stats. */
+    @GetMapping("/stats")
+    public ResponseEntity<?> stats() {
+        try {
+            ExecResult r = sshService.execCommand(
+                "docker stats --no-stream --format '{{.ID}}|{{.CPUPerc}}|{{.MemUsage}}'");
+            if (r.exitCode() != 0) return ResponseEntity.ok(List.of());
+
+            List<Map<String, String>> result = new java.util.ArrayList<>();
+            for (String line : r.stdout().split("\n")) {
+                String clean = line.trim().replaceAll("'", "");
+                if (clean.isBlank()) continue;
+                String[] parts = clean.split("\\|");
+                if (parts.length < 3) continue;
+                result.add(Map.of(
+                    "id",       parts[0].trim(),
+                    "cpu",      parts[1].trim(),
+                    "mem",      parts[2].trim()
+                ));
+            }
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @GetMapping("/info")
     public ResponseEntity<Map<String, Object>> info() {
         try {

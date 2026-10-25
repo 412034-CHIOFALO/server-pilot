@@ -10,4 +10,9 @@ WORKDIR /app
 COPY --from=build /app/target/server-pilot.jar app.jar
 RUN mkdir -p /data
 EXPOSE 8090
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", \
+  "-Djava.security.egd=file:/dev/./urandom", \
+  "-XX:+UseG1GC", \
+  "-XX:MaxRAMPercentage=75.0", \
+  "-XX:+OptimizeStringConcat", \
+  "-jar", "app.jar"]

@@ -54,6 +54,26 @@ const TEXT_EXTS  = new Set([
     .bc-part:hover { text-decoration:underline; }
     .bc-current { color:var(--text-primary); }
 
+    .search-bar {
+      display:flex; align-items:center; gap:8px;
+      background:var(--bg-secondary); border:1px solid var(--border);
+      border-radius:8px; padding:0 12px; transition:border-color .15s;
+    }
+    .search-bar:focus-within { border-color:var(--accent); }
+    .search-bar input {
+      background:transparent; border:none; outline:none;
+      color:var(--text-primary); font-size:13px; padding:7px 0; width:220px;
+    }
+    .search-bar mat-icon { font-size:16px; width:16px; height:16px; color:var(--text-muted); }
+    .search-results { margin-top:8px; }
+    .search-result-item {
+      display:flex; align-items:center; gap:8px;
+      padding:8px 14px; cursor:pointer; border-radius:6px; font-size:12px;
+      font-family:monospace; color:var(--text-secondary); transition:background .1s;
+    }
+    .search-result-item:hover { background:var(--bg-hover); color:var(--accent); }
+    .search-spinner { display:inline-block; width:14px; height:14px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
     .btn-group { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
     .action-btn {
       display:flex; align-items:center; gap:6px; padding:7px 14px;
@@ -176,6 +196,19 @@ const TEXT_EXTS  = new Set([
   template: `
     <div class="toolbar">
       <h2 class="page-title" style="margin:0"><mat-icon>folder</mat-icon> Archivos SFTP</h2>
+      <div class="search-bar">
+        <mat-icon>search</mat-icon>
+        <input #searchInput
+               [(ngModel)]="searchQuery"
+               placeholder="Buscar archivos..."
+               (keyup.enter)="runSearch()"
+               (keyup.escape)="clearSearch()">
+        @if (searchQuery) {
+          <button style="background:none;border:none;cursor:pointer;padding:0;display:flex" (click)="clearSearch()">
+            <mat-icon style="font-size:15px;width:15px;height:15px;color:var(--text-muted)">close</mat-icon>
+          </button>
+        }
+      </div>
       @if (view() === 'list') {
         <div class="btn-group">
           <label class="action-btn" style="cursor:pointer">
@@ -210,6 +243,26 @@ const TEXT_EXTS  = new Set([
         }
       }
     </div>
+
+    <!-- ── Resultados de búsqueda ── -->
+    @if (searching() || searchResults().length > 0) {
+      <div class="table-wrap search-results" style="margin-bottom:16px">
+        @if (searching()) {
+          <div class="loading" style="display:flex;align-items:center;gap:8px;padding:14px 16px">
+            <span class="search-spinner"></span> Buscando...
+          </div>
+        } @else if (searchResults().length === 0) {
+          <div class="empty" style="padding:20px"><p>Sin resultados para "{{ searchQuery }}"</p></div>
+        } @else {
+          @for (r of searchResults(); track r) {
+            <div class="search-result-item" (click)="navigateToSearchResult(r)">
+              <mat-icon style="font-size:14px;width:14px;height:14px;flex-shrink:0">insert_drive_file</mat-icon>
+              {{ r }}
+            </div>
+          }
+        }
+      </div>
+    }
 
     <!-- ── Editor de texto ── -->
     @if (view() === 'editor') {
@@ -396,6 +449,10 @@ export class FilesComponent implements OnInit, OnDestroy {
 
   private currentFile: FileEntry | null = null;
   private nextId = 0;
+
+  searchQuery   = '';
+  searchResults = signal<string[]>([]);
+  searching     = signal(false);
 
   breadcrumbs = computed(() => {
     const parts = this.currentPath().split('/').filter(p => p);
@@ -633,6 +690,30 @@ export class FilesComponent implements OnInit, OnDestroy {
         error: err => this.snackBar.open(err.error?.error || 'Error al eliminar', 'Cerrar', { duration: 5000 })
       });
     });
+  }
+
+  runSearch() {
+    const q = this.searchQuery.trim();
+    if (!q) return;
+    this.searching.set(true);
+    this.searchResults.set([]);
+    this.api.get<string[]>(`/api/files/search?path=${encodeURIComponent(this.currentPath())}&name=${encodeURIComponent(q)}`).subscribe({
+      next: r  => { this.searchResults.set(r); this.searching.set(false); },
+      error: () => { this.searching.set(false); this.snackBar.open('Error al buscar archivos', 'Cerrar', { duration: 4000 }); }
+    });
+  }
+
+  clearSearch() {
+    this.searchQuery = '';
+    this.searchResults.set([]);
+    this.searching.set(false);
+  }
+
+  navigateToSearchResult(path: string) {
+    const lastSlash = path.lastIndexOf('/');
+    const dir = lastSlash > 0 ? path.substring(0, lastSlash) : '/';
+    this.clearSearch();
+    this.navigate(dir);
   }
 
   fileKind(name: string): FileKind {

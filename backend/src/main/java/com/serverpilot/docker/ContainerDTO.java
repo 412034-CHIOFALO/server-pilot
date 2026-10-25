@@ -10,5 +10,6 @@ public record ContainerDTO(
     String status,
     String state,
     List<String> ports,
-    String project
+    String project,
+    String restartPolicy
 ) {}
