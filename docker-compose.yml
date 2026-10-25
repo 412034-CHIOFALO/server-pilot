@@ -21,7 +21,7 @@ services:
   server-pilot-frontend:
     build: ./frontend
     ports:
-      - "0.0.0.0:80:80"
+      - "0.0.0.0:11111:80"
     depends_on:
       - server-pilot-backend
     restart: always
